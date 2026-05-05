@@ -27,6 +27,7 @@ from rrvix.models import (
     CIR,
 )
 from rrvix.parser.bibliography import BibEntry, parse_bib_file
+from rrvix.parser.clean import tex_to_text
 from rrvix.parser.sidecar import (
     EdgeMarker,
     EnvMarker,
@@ -127,10 +128,12 @@ def _build_claims(
                 extends.append(edge.target)
 
         statement = env.body.strip()
-        # Strip out the \label{...} call and any leading whitespace so the
-        # statement is just the natural-language body.
+        # Strip out the \label{...} call so the statement is just the body.
         if env.label:
             statement = statement.replace(f"\\label{{{env.label}}}", "").strip()
+        # Run through the TeX-to-text cleaner so the CIR carries plain
+        # prose rather than raw cosmetic macros (\texttt, \emph, etc.).
+        statement = tex_to_text(statement)
 
         claim: dict[str, Any] = {
             "id": cid,
@@ -270,9 +273,9 @@ def build_cir(
         or "0.1.0",
         "id": paper_id,
         "version": meta.get("version") or tex.metadata.rrvix_version or "v1",
-        "title": tex.title or "Untitled",
+        "title": tex_to_text(tex.title) if tex.title else "Untitled",
         "authors": _build_authors(tex),
-        "abstract": tex.abstract or "",
+        "abstract": tex_to_text(tex.abstract) if tex.abstract else "",
         "submitted_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "license": meta.get("license") or tex.metadata.rrvix_license or "CC-BY-4.0",
         "source": {
