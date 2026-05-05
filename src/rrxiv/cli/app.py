@@ -16,6 +16,7 @@ from rrxiv.annotations import (
     load_annotations_file,
     validate_annotation_payload,
 )
+from rrxiv.diff import diff_cir
 from rrxiv.graph import ClaimGraph
 from rrxiv.models import CIR
 from rrxiv.parser import build_cir
@@ -258,6 +259,41 @@ def init(
     bn = basename or paper_id
     typer.echo(f"  Build: tectonic --keep-intermediates {target}/{bn}.tex")
     typer.echo(f"  Parse: rrxiv parse {target}/{bn}.tex")
+
+
+@app.command()
+def diff(
+    before: Annotated[Path, typer.Argument(help="Earlier CIR JSON file.")],
+    after: Annotated[Path, typer.Argument(help="Later CIR JSON file.")],
+    output_format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            "-f",
+            help="Output format: 'summary' (default, human-readable) or 'json' (structured).",
+        ),
+    ] = "summary",
+) -> None:
+    """Semantic diff between two CIR documents (e.g. two paper revisions).
+
+    Reports added/removed/changed claims, added/removed edges,
+    citation deltas, annotation deltas, and top-level field changes.
+    Ignores environment-specific fields like submitted_at.
+    """
+    before_cir = CIR.model_validate(json.loads(before.read_text(encoding="utf-8")))
+    after_cir = CIR.model_validate(json.loads(after.read_text(encoding="utf-8")))
+    d = diff_cir(before_cir, after_cir)
+
+    if output_format == "json":
+        typer.echo(json.dumps(d.to_dict(), indent=2, default=str))
+    elif output_format == "summary":
+        typer.echo(d.summary())
+    else:
+        typer.echo(
+            f"FAIL: unknown format '{output_format}' (expected 'summary' or 'json')",
+            err=True,
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":
