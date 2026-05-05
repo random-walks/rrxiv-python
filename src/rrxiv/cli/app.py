@@ -17,6 +17,7 @@ from rrxiv.annotations import (
     validate_annotation_payload,
 )
 from rrxiv.diff import diff_cir
+from rrxiv.doctor import overall_status, run_doctor
 from rrxiv.graph import ClaimGraph
 from rrxiv.models import CIR
 from rrxiv.parser import build_cir
@@ -294,6 +295,32 @@ def diff(
             err=True,
         )
         sys.exit(1)
+
+
+@app.command()
+def doctor() -> None:
+    """Check workspace + environment health.
+
+    Reports per-check status (PASS/WARN/FAIL) for: package importable,
+    LaTeX engine on PATH, vendored schemas present and parseable,
+    generated models importable, CIR schema version matches the
+    package's expectation. Exit code 1 on any FAIL, 0 otherwise.
+    WARN does not affect the exit code.
+    """
+    results = run_doctor()
+    typer.echo("rrxiv doctor")
+    typer.echo("------------")
+    for r in results:
+        typer.echo(r.render())
+    typer.echo("")
+    status = overall_status(results)
+    if status == "fail":
+        typer.echo("Overall: FAIL — fix the [FAIL] checks above.", err=True)
+        sys.exit(1)
+    if status == "warn":
+        typer.echo("Overall: PASS with warnings.")
+    else:
+        typer.echo("Overall: PASS.")
 
 
 if __name__ == "__main__":
