@@ -19,6 +19,7 @@ from rrxiv.annotations import (
 from rrxiv.graph import ClaimGraph
 from rrxiv.models import CIR
 from rrxiv.parser import build_cir
+from rrxiv.scaffold import ScaffoldOptions, scaffold_paper
 
 
 class GraphFormat(enum.StrEnum):
@@ -190,6 +191,73 @@ def annotation_validate(
         f"OK: {len(annotations)} annotation(s) validate"
         + (" (incl. per-type payloads)." if strict else " (base schema only).")
     )
+
+
+@app.command()
+def init(
+    directory: Annotated[
+        Path,
+        typer.Argument(help="Directory to create. Must not exist or must be empty."),
+    ],
+    paper_id: Annotated[
+        str,
+        typer.Option(
+            "--id",
+            help="Stable paper ID for \\rrxivid. Conventionally the directory name.",
+        ),
+    ],
+    title: Annotated[
+        str,
+        typer.Option("--title", "-t", help="Paper title."),
+    ] = "TODO: title",
+    author: Annotated[
+        str,
+        typer.Option(
+            "--author",
+            "-a",
+            help="Author name (single string for v0; future: ORCID-aware).",
+        ),
+    ] = "TODO: Author Name",
+    license: Annotated[
+        str,
+        typer.Option("--license", help="SPDX license identifier."),
+    ] = "CC-BY-4.0",
+    topics: Annotated[
+        str,
+        typer.Option("--topics", help="Comma-separated topic IDs."),
+    ] = "",
+    basename: Annotated[
+        str | None,
+        typer.Option(
+            "--basename",
+            help="Filename stem for the .tex/.bib (defaults to paper_id).",
+        ),
+    ] = None,
+) -> None:
+    """Scaffold a new rrxiv paper directory.
+
+    Writes a self-contained directory with the paper's .tex, .bib, a
+    bundled rrxiv.cls, and a README. The output compiles cleanly with
+    tectonic and produces a valid CIR via `rrxiv parse`.
+    """
+    topics_tuple = tuple(t.strip() for t in topics.split(",") if t.strip())
+    opts = ScaffoldOptions(
+        paper_id=paper_id,
+        title=title,
+        author=author,
+        license=license,
+        topics=topics_tuple,
+        basename=basename,
+    )
+    try:
+        target = scaffold_paper(directory, opts)
+    except FileExistsError as e:
+        typer.echo(f"FAIL: {e}", err=True)
+        sys.exit(1)
+    typer.echo(f"OK: scaffolded {target}")
+    bn = basename or paper_id
+    typer.echo(f"  Build: tectonic --keep-intermediates {target}/{bn}.tex")
+    typer.echo(f"  Parse: rrxiv parse {target}/{bn}.tex")
 
 
 if __name__ == "__main__":

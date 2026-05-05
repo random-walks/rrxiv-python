@@ -24,7 +24,9 @@ from rrxiv.models import (
     Author,
     Citation,
     Claim,
+    Figure,
     Paper,
+    Section,
     Source,
 )
 
@@ -146,6 +148,8 @@ _KIND_TO_MODEL: Final[dict[str, type[BaseModel]]] = {
     "claim": Claim,
     "annotation": Annotation,
     "citation": Citation,
+    "section": Section,
+    "figure": Figure,
     "cir": CIR,
 }
 

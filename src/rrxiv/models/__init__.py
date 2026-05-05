@@ -22,10 +22,6 @@ from rrxiv.models._generated.annotation_schema import (
 from rrxiv.models._generated.cir_schema import (
     CanonicalIntermediateRepresentationCir as CIR,  # noqa: N814 — CIR is an acronym, not a constant
 )
-from rrxiv.models._generated.cir_schema import (
-    Figure,
-    Section,
-)
 from rrxiv.models._generated.citation_schema import Citation
 from rrxiv.models._generated.claim_schema import (
     Claim,
@@ -37,12 +33,14 @@ from rrxiv.models._generated.claim_schema import (
     Scope,
     SourceLocation,
 )
+from rrxiv.models._generated.figure_schema import Figure
 from rrxiv.models._generated.paper_schema import (
     Author,
     Format,
     Paper,
     Source,
 )
+from rrxiv.models._generated.section_schema import Section
 
 __all__ = [
     "CIR",
