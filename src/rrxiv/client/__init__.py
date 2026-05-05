@@ -11,6 +11,7 @@ The client targets the API sketched in
 variant lands in v0.2.
 """
 
+from rrxiv.client.async_client import AsyncRrxivClient
 from rrxiv.client.auth import BearerToken
 from rrxiv.client.client import RrxivClient
 from rrxiv.client.errors import (
@@ -33,6 +34,7 @@ from rrxiv.client.retry import (
 __all__ = [
     "DEFAULT_RETRY_POLICY",
     "NO_RETRY_POLICY",
+    "AsyncRrxivClient",
     "BadRequestError",
     "BearerToken",
     "ForbiddenError",
