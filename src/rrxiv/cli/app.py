@@ -22,6 +22,7 @@ from rrxiv.graph import ClaimGraph
 from rrxiv.models import CIR
 from rrxiv.parser import build_cir
 from rrxiv.scaffold import ScaffoldOptions, scaffold_paper
+from rrxiv.snapshot import SnapshotEntry, create_snapshot, validate_snapshot
 
 
 class GraphFormat(enum.StrEnum):
@@ -321,6 +322,96 @@ def doctor() -> None:
         typer.echo("Overall: PASS with warnings.")
     else:
         typer.echo("Overall: PASS.")
+
+
+snapshot_app = typer.Typer(
+    no_args_is_help=True,
+    help="Snapshot tarball create / validate.",
+)
+app.add_typer(snapshot_app, name="snapshot")
+
+
+@snapshot_app.command("create")
+def snapshot_create(
+    directory: Annotated[
+        Path,
+        typer.Argument(
+            help=(
+                "Directory containing per-paper subdirs. Each subdir's name is "
+                "the paper_id; each must contain at least cir.json (and may "
+                "optionally contain source.tar.gz)."
+            ),
+        ),
+    ],
+    output: Annotated[
+        Path,
+        typer.Option("--output", "-o", help="Output tarball path."),
+    ],
+    snapshot_id: Annotated[
+        str | None,
+        typer.Option("--snapshot-id", help="Snapshot ID. Defaults to a generated value."),
+    ] = None,
+    download_uri: Annotated[
+        str,
+        typer.Option(
+            "--download-uri",
+            help="Public retrieval URI to record in the manifest. Optional.",
+        ),
+    ] = "",
+) -> None:
+    """Create a snapshot tarball from a directory of per-paper subdirs."""
+    if not directory.is_dir():
+        typer.echo(f"FAIL: not a directory: {directory}", err=True)
+        sys.exit(1)
+    entries: list[SnapshotEntry] = []
+    for paper_dir in sorted(directory.iterdir()):
+        if not paper_dir.is_dir():
+            continue
+        cir_path = paper_dir / "cir.json"
+        if not cir_path.is_file():
+            typer.echo(
+                f"WARN: skipping {paper_dir.name}: no cir.json", err=True
+            )
+            continue
+        candidate_blob = paper_dir / "source.tar.gz"
+        source_blob_path: Path | None = (
+            candidate_blob if candidate_blob.is_file() else None
+        )
+        entries.append(
+            SnapshotEntry(
+                paper_id=paper_dir.name,
+                cir_path=cir_path,
+                source_blob_path=source_blob_path,
+            )
+        )
+    if not entries:
+        typer.echo(f"FAIL: no per-paper subdirectories with cir.json in {directory}", err=True)
+        sys.exit(1)
+    manifest = create_snapshot(
+        entries,
+        output,
+        snapshot_id=snapshot_id,
+        download_uri=download_uri,
+    )
+    typer.echo(f"OK: wrote {output} ({manifest.papers} papers, {manifest.size_bytes} bytes)")
+    typer.echo(f"  snapshot_id: {manifest.snapshot_id}")
+    typer.echo(f"  sha256:      {manifest.sha256}")
+
+
+@snapshot_app.command("validate")
+def snapshot_validate(
+    tarball: Annotated[Path, typer.Argument(help="Path to the snapshot tarball.")],
+) -> None:
+    """Verify a snapshot tarball's manifest, file list, and checksums."""
+    report = validate_snapshot(tarball)
+    if not report.ok:
+        for err in report.errors:
+            typer.echo(f"FAIL: {err}", err=True)
+        sys.exit(1)
+    if report.warnings:
+        for w in report.warnings:
+            typer.echo(f"WARN: {w}", err=True)
+    typer.echo(f"OK: {tarball} validates as a rrxiv snapshot.")
 
 
 if __name__ == "__main__":
