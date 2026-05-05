@@ -24,14 +24,22 @@ from rrvix.client.errors import (
     UnauthorizedError,
     ValidationError,
 )
+from rrvix.client.retry import (
+    DEFAULT_RETRY_POLICY,
+    NO_RETRY_POLICY,
+    RetryPolicy,
+)
 
 __all__ = [
+    "DEFAULT_RETRY_POLICY",
+    "NO_RETRY_POLICY",
     "BadRequestError",
     "BearerToken",
     "ForbiddenError",
     "IdempotencyKeyConflictError",
     "NotFoundError",
     "RateLimitedError",
+    "RetryPolicy",
     "RrvixClient",
     "RrvixError",
     "ServerError",
