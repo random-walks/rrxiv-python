@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
-from rrvix.parser.tex import (
+from rrxiv.parser.tex import (
     parse_tex,
     tex_env_to_sidecar_kind,
 )
 
 MINIMAL_TEX = r"""
-\documentclass{rrvix}
+\documentclass{rrxiv}
 
-\rrvixid{rrvix-example-minimal}
-\rrvixversion{v1}
-\rrvixprotocolversion{0.1.0}
-\rrvixlicense{CC-BY-4.0}
-\rrvixtopics{example,conformance}
+\rrxivid{rrxiv-example-minimal}
+\rrxivversion{v1}
+\rrxivprotocolversion{0.1.0}
+\rrxivlicense{CC-BY-4.0}
+\rrxivtopics{example,conformance}
 
-\title{A minimal rrvix paper}
-\author{rrvix Project}
+\title{A minimal rrxiv paper}
+\author{rrxiv Project}
 
 \begin{document}
 \maketitle
@@ -32,7 +32,7 @@ math mode and no nested environments.
 
 \begin{claim}[Conformance fixture]
 \label{claim:fixture}
-A minimal rrvix paper produces a valid CIR~\cite{rrvix-cir-schema}.
+A minimal rrxiv paper produces a valid CIR~\cite{rrxiv-cir-schema}.
 \end{claim}
 
 \begin{evidence}[CI conformance test]
@@ -54,13 +54,13 @@ What happens when the schema bumps?
 
 def test_title() -> None:
     doc = parse_tex(MINIMAL_TEX)
-    assert doc.title == "A minimal rrvix paper"
+    assert doc.title == "A minimal rrxiv paper"
 
 
 def test_authors() -> None:
     doc = parse_tex(MINIMAL_TEX)
     assert len(doc.authors) == 1
-    assert doc.authors[0].name == "rrvix Project"
+    assert doc.authors[0].name == "rrxiv Project"
     assert doc.authors[0].affil_indices == ()
 
 
@@ -90,11 +90,11 @@ def test_abstract() -> None:
 
 def test_metadata() -> None:
     doc = parse_tex(MINIMAL_TEX)
-    assert doc.metadata.rrvix_id == "rrvix-example-minimal"
-    assert doc.metadata.rrvix_version == "v1"
-    assert doc.metadata.rrvix_protocol_version == "0.1.0"
-    assert doc.metadata.rrvix_license == "CC-BY-4.0"
-    assert doc.metadata.rrvix_topics == ("example", "conformance")
+    assert doc.metadata.rrxiv_id == "rrxiv-example-minimal"
+    assert doc.metadata.rrxiv_version == "v1"
+    assert doc.metadata.rrxiv_protocol_version == "0.1.0"
+    assert doc.metadata.rrxiv_license == "CC-BY-4.0"
+    assert doc.metadata.rrxiv_topics == ("example", "conformance")
 
 
 def test_sections() -> None:
@@ -113,7 +113,7 @@ def test_environments() -> None:
     claim = doc.environments[0]
     assert claim.title == "Conformance fixture"
     assert claim.label == "claim:fixture"
-    assert "minimal rrvix paper produces a valid CIR" in claim.body
+    assert "minimal rrxiv paper produces a valid CIR" in claim.body
 
     ev = doc.environments[1]
     assert ev.title == "CI conformance test"
@@ -127,7 +127,7 @@ def test_environments() -> None:
 def test_citations() -> None:
     doc = parse_tex(MINIMAL_TEX)
     assert len(doc.citations) == 1
-    assert doc.citations[0].keys == ("rrvix-cir-schema",)
+    assert doc.citations[0].keys == ("rrxiv-cir-schema",)
 
 
 def test_bibliography_file() -> None:
@@ -159,7 +159,7 @@ def test_multiple_subsection_levels() -> None:
     assert levels == [1, 2, 3, 1]
 
 
-def test_rrvixremark_maps_to_remark() -> None:
-    """The TeX env name 'rrvixremark' maps to sidecar kind 'remark'."""
-    assert tex_env_to_sidecar_kind("rrvixremark") == "remark"
+def test_rrxivremark_maps_to_remark() -> None:
+    """The TeX env name 'rrxivremark' maps to sidecar kind 'remark'."""
+    assert tex_env_to_sidecar_kind("rrxivremark") == "remark"
     assert tex_env_to_sidecar_kind("claim") == "claim"

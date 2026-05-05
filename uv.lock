@@ -970,7 +970,7 @@ wheels = [
 ]
 
 [[package]]
-name = "rrvix"
+name = "rrxiv"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

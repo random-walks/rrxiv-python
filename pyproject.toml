@@ -1,10 +1,10 @@
 [project]
-name = "rrvix"
+name = "rrxiv"
 version = "0.1.0"
-description = "Reference Python client for the rrvix protocol."
+description = "Reference Python client for the rrxiv protocol."
 readme = "README.md"
 license = { text = "MIT" }
-authors = [{ name = "rrvix contributors" }]
+authors = [{ name = "rrxiv contributors" }]
 requires-python = ">=3.11"
 dependencies = [
     "pydantic[email]>=2.5",
@@ -25,7 +25,7 @@ dev = [
 ]
 
 [project.scripts]
-rrvix = "rrvix.cli.app:app"
+rrxiv = "rrxiv.cli.app:app"
 
 [build-system]
 requires = ["hatchling"]
@@ -34,7 +34,7 @@ build-backend = "hatchling.build"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["src/rrvix/models/_generated"]
+extend-exclude = ["src/rrxiv/models/_generated"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "RUF"]
@@ -42,7 +42,7 @@ select = ["E", "F", "I", "N", "UP", "B", "RUF"]
 [tool.mypy]
 strict = true
 python_version = "3.11"
-exclude = ["src/rrvix/models/_generated"]
+exclude = ["src/rrxiv/models/_generated"]
 plugins = ["pydantic.mypy"]
 
 [tool.pydantic-mypy]
@@ -51,7 +51,7 @@ init_typed = true
 warn_required_dynamic_aliases = true
 
 [[tool.mypy.overrides]]
-module = "rrvix.models._generated.*"
+module = "rrxiv.models._generated.*"
 ignore_errors = true
 
 [tool.pytest.ini_options]

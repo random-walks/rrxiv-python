@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
-# sync_schemas.sh — copy rrvix JSON Schemas into this repo.
+# sync_schemas.sh — copy rrxiv JSON Schemas into this repo.
 #
-# rrvix-python vendors the schemas from the canonical rrvix repo. This
+# rrxiv-python vendors the schemas from the canonical rrxiv repo. This
 # script copies them in and writes a MANIFEST recording the source path,
 # git SHA, and timestamp for traceability.
 #
 # Usage:
-#   ./scripts/sync_schemas.sh                              # default: ../rrvix/schema
-#   ./scripts/sync_schemas.sh /path/to/rrvix/schema        # explicit path
+#   ./scripts/sync_schemas.sh                              # default: ../rrxiv/schema
+#   ./scripts/sync_schemas.sh /path/to/rrxiv/schema        # explicit path
 #
 # After syncing, run scripts/regen_models.sh to regenerate pydantic models.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE="${1:-$ROOT/../rrvix/schema}"
-DEST="$ROOT/src/rrvix/_schemas"
-MANIFEST="$ROOT/src/rrvix/_schemas_manifest.txt"
+SOURCE="${1:-$ROOT/../rrxiv/schema}"
+DEST="$ROOT/src/rrxiv/_schemas"
+MANIFEST="$ROOT/src/rrxiv/_schemas_manifest.txt"
 
 if [[ ! -d "$SOURCE" ]]; then
     echo "ERROR: schema source directory not found: $SOURCE" >&2
-    echo "Pass an explicit path: $0 /path/to/rrvix/schema" >&2
+    echo "Pass an explicit path: $0 /path/to/rrxiv/schema" >&2
     exit 1
 fi
 

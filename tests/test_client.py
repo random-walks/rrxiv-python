@@ -1,4 +1,4 @@
-"""Tests for the rrvix HTTP client.
+"""Tests for the rrxiv HTTP client.
 
 Use httpx's MockTransport so tests are deterministic and don't need a
 running server. The client surfaces typed errors per status code; we
@@ -14,23 +14,23 @@ from typing import Any
 import httpx
 import pytest
 
-from rrvix.client import (
+from rrxiv.client import (
     BearerToken,
     NotFoundError,
     RateLimitedError,
-    RrvixClient,
+    RrxivClient,
     ServerError,
     UnauthorizedError,
     ValidationError,
 )
-from rrvix.client.client import _gen_idempotency_key
+from rrxiv.client.client import _gen_idempotency_key
 
 # ---- Fixtures ----
 
 
 def _paper_payload(paper_id: str = "p1") -> dict[str, Any]:
     return {
-        "rrvix_version": "0.1.0",
+        "rrxiv_version": "0.1.0",
         "id": paper_id,
         "version": "v1",
         "title": "T",
@@ -66,9 +66,9 @@ def _annotation_payload(ann_id: str = "ann-1") -> dict[str, Any]:
 Handler = Callable[[httpx.Request], httpx.Response]
 
 
-def _client_with_handler(handler: Handler) -> RrvixClient:
+def _client_with_handler(handler: Handler) -> RrxivClient:
     transport = httpx.MockTransport(handler)
-    return RrvixClient("https://rrvix.org/api/v0", transport=transport)
+    return RrxivClient("https://rrxiv.com/api/v0", transport=transport)
 
 
 # ---- Happy paths ----
@@ -134,8 +134,8 @@ class TestHappyPath:
 
         auth = BearerToken("tok-x", "orcid", "0000-0001-2345-6789")
         transport = httpx.MockTransport(handler)
-        with RrvixClient(
-            "https://rrvix.org/api/v0", auth=auth, transport=transport
+        with RrxivClient(
+            "https://rrxiv.com/api/v0", auth=auth, transport=transport
         ) as client:
             ann = client.create_annotation(_annotation_payload(), idempotency_key="my-key")
         assert ann.id == "ann-1"
@@ -151,7 +151,7 @@ class TestHappyPath:
 
         with _client_with_handler(handler) as client:
             client.create_annotation(_annotation_payload())
-        assert captured["idem"].startswith("rrvix-py-")
+        assert captured["idem"].startswith("rrxiv-py-")
 
 
 # ---- Error paths ----
@@ -203,4 +203,4 @@ class TestErrors:
 class TestHelpers:
     def test_idempotency_key_unique(self) -> None:
         assert _gen_idempotency_key() != _gen_idempotency_key()
-        assert _gen_idempotency_key().startswith("rrvix-py-")
+        assert _gen_idempotency_key().startswith("rrxiv-py-")

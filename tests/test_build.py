@@ -1,8 +1,8 @@
-"""End-to-end parser tests: .tex + .rrvix.aux + .bib → CIR → schema validation.
+"""End-to-end parser tests: .tex + .rrxiv.aux + .bib → CIR → schema validation.
 
 These run against vendored fixtures in ``tests/fixtures/`` so the test
 suite doesn't depend on a working LaTeX install. The fixtures are
-verbatim copies of files from the rrvix repo plus a precompiled sidecar.
+verbatim copies of files from the rrxiv repo plus a precompiled sidecar.
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from rrvix.models import CIR
-from rrvix.parser import build_cir
+from rrxiv.models import CIR
+from rrxiv.parser import build_cir
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 MINIMAL_DIR = FIXTURES_DIR / "minimal"
@@ -32,18 +32,18 @@ def test_minimal_returns_cir(minimal_cir: CIR) -> None:
 
 def test_minimal_metadata(minimal_cir: CIR) -> None:
     """Metadata fields come from the sidecar."""
-    assert minimal_cir.id == "rrvix-example-minimal"
+    assert minimal_cir.id == "rrxiv-example-minimal"
     assert minimal_cir.version == "v1"
-    assert minimal_cir.rrvix_version == "0.1.0"
+    assert minimal_cir.rrxiv_version == "0.1.0"
     assert minimal_cir.license == "CC-BY-4.0"
     assert minimal_cir.topics == ["example", "conformance"]
 
 
 def test_minimal_title_and_authors(minimal_cir: CIR) -> None:
     """Title and authors come from the .tex source."""
-    assert minimal_cir.title == "A minimal rrvix paper"
+    assert minimal_cir.title == "A minimal rrxiv paper"
     assert len(minimal_cir.authors) == 1
-    assert minimal_cir.authors[0].name == "rrvix Project"
+    assert minimal_cir.authors[0].name == "rrxiv Project"
 
 
 def test_minimal_abstract_present(minimal_cir: CIR) -> None:
@@ -61,21 +61,21 @@ def test_minimal_one_claim(minimal_cir: CIR) -> None:
     assert minimal_cir.claims is not None
     assert len(minimal_cir.claims) == 1
     claim = minimal_cir.claims[0]
-    assert claim.id == "rrvix-example-minimal:claim:fixture"
-    assert "minimal rrvix paper" in claim.statement
+    assert claim.id == "rrxiv-example-minimal:claim:fixture"
+    assert "minimal rrxiv paper" in claim.statement
     assert claim.canonical is True
 
 
 def test_minimal_one_citation(minimal_cir: CIR) -> None:
-    """The .tex cites \\cite{rrvix-cir-schema}; the .bib resolves it."""
+    """The .tex cites \\cite{rrxiv-cir-schema}; the .bib resolves it."""
     assert minimal_cir.citations is not None
     assert len(minimal_cir.citations) == 1
     cit_root = minimal_cir.citations[0]
     # Citation is a RootModel union; access the underlying variant via .root
     cit_data = cit_root.model_dump(exclude_none=True)
-    assert cit_data["key"] == "rrvix-cir-schema"
+    assert cit_data["key"] == "rrxiv-cir-schema"
     assert cit_data["bibtex_entry"]
-    assert "rrvix-cir-schema" in cit_data["bibtex_entry"]
+    assert "rrxiv-cir-schema" in cit_data["bibtex_entry"]
 
 
 def test_minimal_source(minimal_cir: CIR) -> None:
@@ -98,13 +98,13 @@ def test_invalid_tex_raises_validation_error(tmp_path: Path) -> None:
     The parser tolerates many things, but a paper with no \\title and no
     abstract still produces a CIR (with placeholders); a paper with a
     sidecar that lacks the id metadata field falls back to the .tex's
-    \\rrvixid or the filename. To force a ValidationError we'd need a
+    \\rrxivid or the filename. To force a ValidationError we'd need a
     truly malformed sidecar — covered separately in test_sidecar.py.
     Here we just confirm an empty .tex falls through cleanly.
     """
     tex = tmp_path / "empty.tex"
-    sidecar = tmp_path / "empty.rrvix.aux"
-    tex.write_text("\\documentclass{rrvix}\n\\begin{document}\n\\end{document}\n")
+    sidecar = tmp_path / "empty.rrxiv.aux"
+    tex.write_text("\\documentclass{rrxiv}\n\\begin{document}\n\\end{document}\n")
     sidecar.write_text("")  # no metadata
     # Falls back to filename for id; should still produce a valid CIR
     cir = build_cir(tex)
@@ -115,18 +115,18 @@ def test_invalid_tex_raises_validation_error(tmp_path: Path) -> None:
 def test_no_title_in_source_uses_placeholder(tmp_path: Path) -> None:
     """A .tex without \\title falls back to 'Untitled'."""
     tex = tmp_path / "p.tex"
-    sidecar = tmp_path / "p.rrvix.aux"
+    sidecar = tmp_path / "p.rrxiv.aux"
     tex.write_text(
-        "\\documentclass{rrvix}\n"
+        "\\documentclass{rrxiv}\n"
         "\\begin{document}\n"
         "\\begin{abstract}A.\\end{abstract}\n"
         "\\end{document}\n"
     )
     sidecar.write_text(
-        "RRVIX:meta:id:test-id\n"
-        "RRVIX:meta:version:v1\n"
-        "RRVIX:meta:protocol:0.1.0\n"
-        "RRVIX:meta:license:CC-BY-4.0\n"
+        "RRXIV:meta:id:test-id\n"
+        "RRXIV:meta:version:v1\n"
+        "RRXIV:meta:protocol:0.1.0\n"
+        "RRXIV:meta:license:CC-BY-4.0\n"
     )
     cir = build_cir(tex)
     assert cir.title == "Untitled"
