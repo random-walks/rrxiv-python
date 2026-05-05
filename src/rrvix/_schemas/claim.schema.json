@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rrvix.org/schema/v0/claim.schema.json",
+  "title": "Claim",
+  "description": "A single falsifiable assertion extracted from a paper. The unit of structured knowledge in the rrvix corpus. Claim graph edges (depends_on, supports, contradicts, extends) connect claims across papers.",
+  "version": "0.1.0",
+  "type": "object",
+  "required": ["id", "statement", "claim_type", "evidence_type"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable, globally unique claim ID. Once assigned, NEVER changes. Suggested format: <paper_id>:<local_label>.",
+      "examples": ["01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f:queryability"]
+    },
+    "paper_id": {
+      "type": "string",
+      "description": "ID of the paper this claim originates in. Same paper may contain many claims."
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The claim itself, expressed as a single falsifiable assertion in natural language. Should be standalone-readable."
+    },
+    "claim_type": {
+      "type": "string",
+      "enum": ["empirical", "theoretical", "definitional", "methodological", "computational"],
+      "description": "What kind of claim this is."
+    },
+    "evidence_type": {
+      "type": "string",
+      "enum": ["proof", "experiment", "simulation", "observation", "argument", "definition", "convention"],
+      "description": "What kind of evidence supports the claim within the paper."
+    },
+    "scope": {
+      "type": "object",
+      "description": "Conditions under which the claim is asserted to hold.",
+      "properties": {
+        "models": { "type": "array", "items": { "type": "string" } },
+        "datasets": { "type": "array", "items": { "type": "string" } },
+        "regimes": { "type": "array", "items": { "type": "string" } },
+        "assumptions": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "confidence": {
+      "type": ["object", "null"],
+      "description": "Author's stated confidence in the claim. Optional but encouraged.",
+      "properties": {
+        "point": { "type": "number", "minimum": 0, "maximum": 1 },
+        "lower": { "type": "number", "minimum": 0, "maximum": 1 },
+        "upper": { "type": "number", "minimum": 0, "maximum": 1 },
+        "rationale": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "depends_on": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "IDs of claims (in this or other papers) that this claim relies on. Forms the dependency edges of the claim graph."
+    },
+    "supports": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "IDs of claims that this claim is presented as evidence for."
+    },
+    "contradicts": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "IDs of claims this claim contradicts. Author asserts the contradiction; community may dispute."
+    },
+    "extends": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "IDs of claims this claim extends or generalises."
+    },
+    "replication_status": {
+      "type": "string",
+      "enum": ["untested", "partial", "replicated", "contradicted", "retracted"],
+      "default": "untested",
+      "description": "Aggregate replication status. Updated by server based on annotations."
+    },
+    "labels": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Free-form labels (e.g. 'load-bearing', 'speculative', 'background')."
+    },
+    "source_location": {
+      "type": ["object", "null"],
+      "description": "Where in the source the claim originates, for provenance.",
+      "properties": {
+        "section_id": { "type": "string" },
+        "paragraph": { "type": ["integer", "null"], "minimum": 0 },
+        "raw_source_excerpt": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "extracted_by": {
+      "type": "string",
+      "enum": ["author", "agent", "annotator"],
+      "description": "Who extracted this claim. Author-extracted claims are canonical from submission; others require confirmation."
+    },
+    "canonical": {
+      "type": "boolean",
+      "default": false,
+      "description": "True if confirmed by paper author or via quorum of credentialed annotators."
+    }
+  },
+  "examples": [
+    {
+      "id": "01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f:queryability",
+      "paper_id": "01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "A protocol that exposes claims as first-class structured entities is queryable by agents in ways an unstructured PDF corpus is not.",
+      "claim_type": "theoretical",
+      "evidence_type": "argument",
+      "depends_on": ["01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f:volume-structure"],
+      "labels": ["load-bearing"],
+      "extracted_by": "author",
+      "canonical": true
+    }
+  ]
+}
