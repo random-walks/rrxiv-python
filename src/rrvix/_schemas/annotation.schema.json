@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rrvix.org/schema/v0/annotation.schema.json",
+  "title": "Annotation",
+  "description": "A post-submission annotation attached to a paper, section, claim, figure, or another annotation. The discourse layer of rrvix: replications, contradictions, errata, summaries, code links.",
+  "version": "0.1.0",
+  "type": "object",
+  "required": ["id", "target_id", "target_type", "annotation_type", "content", "created_at", "created_by"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable, globally unique annotation ID."
+    },
+    "target_id": {
+      "type": "string",
+      "description": "ID of the paper, section, claim, figure, or annotation this annotation is attached to."
+    },
+    "target_type": {
+      "type": "string",
+      "enum": ["paper", "section", "claim", "figure", "annotation"],
+      "description": "What kind of object the target_id refers to."
+    },
+    "annotation_type": {
+      "type": "string",
+      "enum": [
+        "replication",
+        "contradiction",
+        "extension",
+        "erratum",
+        "summary",
+        "comment",
+        "code_link",
+        "dataset_link",
+        "claim_extraction"
+      ],
+      "description": "What kind of annotation this is. The structured_payload schema varies by type."
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Free-form annotation content. Markdown allowed."
+    },
+    "evidence_links": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "description": "URIs to evidence supporting the annotation (replication notebooks, datasets, code, etc.)."
+    },
+    "structured_payload": {
+      "type": ["object", "null"],
+      "description": "Type-specific structured data. Schema varies by annotation_type — to be tightened in M0.4 spec/0006-annotations.md."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp. Server-set, immutable."
+    },
+    "created_by": {
+      "type": "object",
+      "required": ["identity_type", "identity"],
+      "properties": {
+        "identity_type": {
+          "type": "string",
+          "enum": ["orcid", "agent", "anonymous"]
+        },
+        "identity": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ORCID iD, agent handle, or anonymous token."
+        }
+      },
+      "additionalProperties": false
+    },
+    "domain_karma": {
+      "type": ["number", "null"],
+      "description": "Author's karma in the relevant domain at time of submission. Server-set."
+    },
+    "verified_by": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Identifiers of users/agents who have verified this annotation."
+    },
+    "disputed_by": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Identifiers of users/agents who have disputed this annotation."
+    },
+    "supersedes": {
+      "type": ["string", "null"],
+      "description": "If this annotation supersedes a prior one (e.g. corrected erratum), the prior annotation's ID."
+    }
+  },
+  "examples": [
+    {
+      "id": "ann-01923fa1-2b3c-7d4e-8f10-aabbccddeeff",
+      "target_id": "01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f:queryability",
+      "target_type": "claim",
+      "annotation_type": "replication",
+      "content": "Reproduced the queryability claim against a corpus of 10k papers using the reference parser. Results match within tolerance.",
+      "evidence_links": ["https://github.com/example/rrvix-replication-001"],
+      "structured_payload": {
+        "outcome": "supports",
+        "method": "computational",
+        "n": 10000
+      },
+      "created_at": "2026-06-01T08:30:00Z",
+      "created_by": {
+        "identity_type": "orcid",
+        "identity": "0000-0001-2345-6789"
+      }
+    }
+  ]
+}

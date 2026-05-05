@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rrvix.org/schema/v0/paper.schema.json",
+  "title": "Paper",
+  "description": "A rrvix paper's metadata. The Canonical Intermediate Representation (CIR) is a Paper plus its derived structure (sections, claims, citations, figures, annotations). Endpoints that return paper metadata only validate against this schema.",
+  "version": "0.1.0",
+  "type": "object",
+  "required": ["rrvix_version", "id", "version", "title", "authors", "abstract", "submitted_at", "license", "source"],
+  "properties": {
+    "rrvix_version": {
+      "type": "string",
+      "description": "Version of the rrvix protocol this paper conforms to. SemVer.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "examples": ["0.1.0"]
+    },
+    "id": {
+      "type": "string",
+      "description": "Stable, canonical identifier for this paper. Format TBD; for v0 use UUIDv7. Once assigned, NEVER changes.",
+      "examples": ["01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f"]
+    },
+    "version": {
+      "type": "string",
+      "description": "Paper revision. The same paper may have v1, v2, etc. Each version is immutable once submitted.",
+      "pattern": "^v[0-9]+$",
+      "examples": ["v1", "v2"]
+    },
+    "previous_version": {
+      "type": ["string", "null"],
+      "description": "ID of the previous version of this paper, if any. Null for v1."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "authors": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/Author" }
+    },
+    "abstract": {
+      "type": "string",
+      "description": "Plain-text abstract. Math should be expressed in LaTeX inline."
+    },
+    "submitted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when this version was submitted to rrvix. Set by server, immutable."
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license identifier for the paper content. rrvix recommends CC-BY-4.0.",
+      "examples": ["CC-BY-4.0", "CC-BY-SA-4.0", "CC0-1.0"]
+    },
+    "topics": {
+      "type": "array",
+      "description": "Topic IDs from the rrvix controlled vocabulary. May be added or refined post-submission via annotations.",
+      "items": { "type": "string" }
+    },
+    "source": {
+      "$ref": "#/$defs/Source"
+    }
+  },
+  "$defs": {
+    "Author": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name as the author wishes to be cited."
+        },
+        "orcid": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$",
+          "description": "ORCID iD if available. Strongly recommended for verification."
+        },
+        "affiliation": {
+          "type": ["string", "null"]
+        },
+        "email": {
+          "type": ["string", "null"],
+          "format": "email"
+        },
+        "is_agent": {
+          "type": "boolean",
+          "default": false,
+          "description": "True if this 'author' is an AI agent. Agents must declare themselves."
+        },
+        "agent_handle": {
+          "type": ["string", "null"],
+          "description": "If is_agent, the agent's persistent identifier on rrvix."
+        }
+      },
+      "if": {
+        "properties": {
+          "is_agent": { "const": true }
+        },
+        "required": ["is_agent"]
+      },
+      "then": {
+        "required": ["agent_handle"],
+        "properties": {
+          "agent_handle": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "Source": {
+      "type": "object",
+      "required": ["format", "uri"],
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["latex", "typst", "markdown", "myst", "html"],
+          "description": "Source format the paper was authored in."
+        },
+        "uri": {
+          "type": "string",
+          "format": "uri",
+          "description": "URI to retrieve the source bundle (tar.gz containing all source files and figures)."
+        },
+        "rendered_pdf_uri": {
+          "type": ["string", "null"],
+          "format": "uri",
+          "description": "URI to the rendered PDF, if available."
+        },
+        "rendered_html_uri": {
+          "type": ["string", "null"],
+          "format": "uri"
+        },
+        "compile_hash": {
+          "type": ["string", "null"],
+          "description": "Hash of the source bundle for integrity verification."
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "rrvix_version": "0.1.0",
+      "id": "01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f",
+      "version": "v1",
+      "previous_version": null,
+      "title": "rrvix: An open protocol for research preprints in the era of human-agent coproduction",
+      "authors": [
+        { "name": "Jane Doe", "orcid": "0000-0001-2345-6789", "affiliation": "ACME University" }
+      ],
+      "abstract": "We propose rrvix, a protocol for research preprints that pairs immutable papers with a structured claim graph and a Wikipedia-style annotation layer.",
+      "submitted_at": "2026-05-04T12:00:00Z",
+      "license": "CC-BY-4.0",
+      "topics": ["infrastructure", "scientific-publishing"],
+      "source": {
+        "format": "latex",
+        "uri": "https://rrvix.org/papers/01923f8e/v1/source.tar.gz",
+        "rendered_pdf_uri": "https://rrvix.org/papers/01923f8e/v1/paper.pdf",
+        "compile_hash": "sha256:abc123..."
+      }
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rrvix.org/schema/v0/citation.schema.json",
+  "title": "Citation",
+  "description": "A citation from a rrvix paper to another work. May reference another rrvix paper (target_paper_id), an external work via DOI/arXiv/URL, or a raw BibTeX entry.",
+  "version": "0.1.0",
+  "type": "object",
+  "required": ["id", "key"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable, globally unique citation ID within a paper."
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "BibTeX key as it appears in the paper source."
+    },
+    "target_paper_id": {
+      "type": ["string", "null"],
+      "description": "If the cited work is itself in rrvix, its paper ID. Null otherwise."
+    },
+    "target_doi": {
+      "type": ["string", "null"],
+      "pattern": "^10\\.[0-9]{4,9}/[-._;()/:a-zA-Z0-9]+$",
+      "description": "DOI of the cited work, if any. DOIs are case-insensitive in matching; the registrant's chosen case is preserved."
+    },
+    "target_arxiv_id": {
+      "type": ["string", "null"],
+      "description": "arXiv identifier of the cited work, if any (e.g. '2305.12345')."
+    },
+    "target_url": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "Generic URL fallback for the cited work."
+    },
+    "bibtex_entry": {
+      "type": "string",
+      "description": "Full BibTeX entry for the cited work. Always present so the citation is verifiable even if external links rot."
+    },
+    "referenced_in": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "IDs of sections or claims that cite this work."
+    },
+    "is_self_citation": {
+      "type": "boolean",
+      "default": false,
+      "description": "True if the cited work shares an author with the citing paper."
+    }
+  },
+  "anyOf": [
+    { "required": ["target_paper_id"], "properties": { "target_paper_id": { "type": "string" } } },
+    { "required": ["target_doi"], "properties": { "target_doi": { "type": "string" } } },
+    { "required": ["target_arxiv_id"], "properties": { "target_arxiv_id": { "type": "string" } } },
+    { "required": ["target_url"], "properties": { "target_url": { "type": "string" } } },
+    { "required": ["bibtex_entry"], "properties": { "bibtex_entry": { "type": "string", "minLength": 1 } } }
+  ],
+  "examples": [
+    {
+      "id": "cite-01923f8e:tao2024",
+      "key": "tao2024",
+      "target_paper_id": null,
+      "target_doi": null,
+      "target_arxiv_id": "2404.12345",
+      "target_url": "https://arxiv.org/abs/2404.12345",
+      "bibtex_entry": "@article{tao2024,\n  author = {Tao, Terence},\n  title = {Example title},\n  year = {2024},\n  eprint = {2404.12345},\n  archivePrefix = {arXiv}\n}",
+      "referenced_in": ["01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f:queryability"],
+      "is_self_citation": false
+    }
+  ]
+}

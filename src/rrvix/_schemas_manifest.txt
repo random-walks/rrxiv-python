@@ -1,0 +1,16 @@
+# Schema sync manifest
+
+Synced from: /Users/blaise/Desktop/blaise-oss/rrvix-dev-workspace/repos/rrvix-python/../rrvix/schema
+Source repo: /Users/blaise/Desktop/blaise-oss/rrvix-dev-workspace/repos/rrvix
+Branch:      m0.2/standalone-schemas-and-tests
+Commit:      5853205e34a037938b9c665c0c74293d1a8a1ef6
+Synced at:   2026-05-05T15:29:43Z
+
+Files:
+  - annotation.schema.json
+  - cir.schema.json
+  - citation.schema.json
+  - claim.schema.json
+  - paper.schema.json
+
+Run scripts/regen_models.sh to regenerate pydantic models from these.
