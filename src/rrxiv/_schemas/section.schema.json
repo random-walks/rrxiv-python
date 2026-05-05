@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rrxiv.com/schema/v0/section.schema.json",
+  "title": "Section",
+  "description": "A section heading from a rrxiv paper. The section hierarchy is the document structure used by clients that browse/navigate papers and by claim queries that filter by section.",
+  "version": "0.1.0",
+  "type": "object",
+  "required": ["id", "type", "title", "order"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable section ID within the paper. Usually the LaTeX label (e.g. 'sec:intro')."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["abstract", "section", "subsection", "subsubsection", "paragraph", "appendix"],
+      "description": "Section level. Maps from LaTeX \\section / \\subsection / \\subsubsection / \\paragraph and the abstract environment."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "order": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Canonical display order within the paper. Sections of the same level use this as the tiebreaker."
+    },
+    "parent_id": {
+      "type": ["string", "null"],
+      "description": "ID of the parent section if this is nested. Null for top-level sections."
+    },
+    "raw_source": {
+      "type": ["string", "null"],
+      "description": "Raw source text of this section, captured if the parser was instructed to preserve it."
+    },
+    "rendered_html": {
+      "type": ["string", "null"],
+      "description": "Rendered HTML form of this section, if a renderer produced one."
+    },
+    "claims_in_section": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Reverse index from section to claims that appear in it."
+    }
+  },
+  "examples": [
+    {
+      "id": "sec:claim",
+      "type": "section",
+      "title": "The claim",
+      "order": 0,
+      "claims_in_section": ["rrxiv-example-minimal:claim:fixture"]
+    }
+  ]
+}

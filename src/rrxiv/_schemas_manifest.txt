@@ -3,14 +3,16 @@
 Synced from: ../rrxiv/schema
 Source repo: /Users/blaise/Desktop/blaise-oss/rrvix-dev-workspace/repos/rrxiv
 Branch:      main
-Commit:      642e08bad8b032834b461774ba16e353b735c4ef
-Synced at:   2026-05-05T17:34:47Z
+Commit:      e4ae3f1beb12e3c709a0200ef9d81ff34faac6de
+Synced at:   2026-05-05T18:05:11Z
 
 Files:
   - annotation.schema.json
   - cir.schema.json
   - citation.schema.json
   - claim.schema.json
+  - figure.schema.json
   - paper.schema.json
+  - section.schema.json
 
 Run scripts/regen_models.sh to regenerate pydantic models from these.

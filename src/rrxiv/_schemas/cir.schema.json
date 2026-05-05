@@ -62,7 +62,7 @@
     },
     "sections": {
       "type": "array",
-      "items": { "$ref": "#/$defs/Section" }
+      "items": { "$ref": "section.schema.json" }
     },
     "claims": {
       "type": "array",
@@ -75,49 +75,12 @@
     },
     "figures": {
       "type": "array",
-      "items": { "$ref": "#/$defs/Figure" }
+      "items": { "$ref": "figure.schema.json" }
     },
     "annotations": {
       "type": "array",
       "description": "Post-submission annotations attached to this paper. Populated lazily; servers may return [] and require a separate query for annotations.",
       "items": { "$ref": "annotation.schema.json" }
-    }
-  },
-  "$defs": {
-    "Section": {
-      "type": "object",
-      "required": ["id", "type", "title", "order"],
-      "properties": {
-        "id": { "type": "string", "description": "Stable section ID within the paper." },
-        "type": {
-          "type": "string",
-          "enum": ["abstract", "section", "subsection", "subsubsection", "paragraph", "appendix"]
-        },
-        "title": { "type": "string" },
-        "order": { "type": "integer", "minimum": 0 },
-        "parent_id": { "type": ["string", "null"] },
-        "raw_source": { "type": ["string", "null"], "description": "Raw source text of this section." },
-        "rendered_html": { "type": ["string", "null"] },
-        "claims_in_section": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "IDs of claims appearing in this section."
-        }
-      }
-    },
-    "Figure": {
-      "type": "object",
-      "required": ["id", "label"],
-      "properties": {
-        "id": { "type": "string" },
-        "label": { "type": "string", "description": "LaTeX label, e.g. 'fig:rho'." },
-        "caption": { "type": "string" },
-        "uri": { "type": ["string", "null"], "format": "uri", "description": "URI to the figure file (PDF, PNG, SVG)." },
-        "referenced_in": {
-          "type": "array",
-          "items": { "type": "string" }
-        }
-      }
     }
   }
 }

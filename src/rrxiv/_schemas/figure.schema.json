@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rrxiv.com/schema/v0/figure.schema.json",
+  "title": "Figure",
+  "description": "A figure from a rrxiv paper. Figures don't participate in the claim graph in v0.1; they're targetable by annotations (e.g. dataset_link).",
+  "version": "0.1.0",
+  "type": "object",
+  "required": ["id", "label"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable figure ID within the paper."
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "description": "LaTeX label, e.g. 'fig:rho'. Matches \\label{} inside the figure environment."
+    },
+    "caption": {
+      "type": "string",
+      "description": "Plain-text caption."
+    },
+    "uri": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "URI to the figure file (PDF, PNG, SVG)."
+    },
+    "referenced_in": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "IDs of sections or claims that reference this figure via \\ref{}."
+    }
+  },
+  "examples": [
+    {
+      "id": "fig:rho-distribution",
+      "label": "fig:rho",
+      "caption": "Distribution of the load parameter rho across our 10k-paper sample.",
+      "uri": "https://rrxiv.com/papers/p1/v1/figures/rho.svg",
+      "referenced_in": ["sec:results", "rrxiv-fixture:claim:queryability"]
+    }
+  ]
+}
