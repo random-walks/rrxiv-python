@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from rrvix.parser.clean import tex_to_text
+from rrxiv.parser.clean import tex_to_text
 
 
 class TestStyleMacros:
@@ -30,7 +30,7 @@ class TestStyleMacros:
 class TestBareFonts:
     def test_large_dropped(self) -> None:
         # The bare-font macro and its trailing whitespace are dropped.
-        assert tex_to_text(r"{\Large rrvix}") == "{rrvix}"
+        assert tex_to_text(r"{\Large rrxiv}") == "{rrxiv}"
 
     def test_huge_dropped(self) -> None:
         out = tex_to_text(r"\Huge title text")
@@ -118,24 +118,24 @@ class TestRealWorldFragments:
     def test_whitepaper_title(self) -> None:
         # The whitepaper title uses \Large + \\[0.2em] + \large
         title_tex = (
-            r"\Large rrvix: An Open Protocol for Research Preprints \\[0.2em] "
+            r"\Large rrxiv: An Open Protocol for Research Preprints \\[0.2em] "
             r"\large in the Era of Human--Agent Coproduction"
         )
         out = tex_to_text(title_tex)
         assert out == (
-            "rrvix: An Open Protocol for Research Preprints "
+            "rrxiv: An Open Protocol for Research Preprints "
             "in the Era of Human--Agent Coproduction"
         )
 
     def test_claim_with_texttt(self) -> None:
         claim = (
-            r"A minimal rrvix paper, when compiled by \texttt{rrvix.cls} v0.1, "
-            r"emits a sidecar \texttt{*.rrvix.aux} file from which the rrvix "
+            r"A minimal rrxiv paper, when compiled by \texttt{rrxiv.cls} v0.1, "
+            r"emits a sidecar \texttt{*.rrxiv.aux} file from which the rrxiv "
             r"parser can produce a CIR object that validates against "
-            r"\texttt{cir.schema.json}~\cite{rrvix-cir-schema} v0.1.0."
+            r"\texttt{cir.schema.json}~\cite{rrxiv-cir-schema} v0.1.0."
         )
         out = tex_to_text(claim)
-        assert "rrvix.cls" in out
+        assert "rrxiv.cls" in out
         assert r"\texttt" not in out
-        assert "rrvix-cir-schema" not in out  # cite stripped
+        assert "rrxiv-cir-schema" not in out  # cite stripped
         assert "validates against cir.schema.json" in out

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from rrvix.annotations import (
+from rrxiv.annotations import (
     AnnotationPayloadError,
     load_annotation,
     load_annotations,

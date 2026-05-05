@@ -1,6 +1,6 @@
-"""Smoke tests for rrvix package."""
+"""Smoke tests for rrxiv package."""
 
-from rrvix import __version__
+from rrxiv import __version__
 
 
 def test_version() -> None:

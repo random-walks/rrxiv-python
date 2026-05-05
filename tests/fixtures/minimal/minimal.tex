@@ -1,23 +1,23 @@
-% minimal.tex — the smallest valid rrvix paper.
+% minimal.tex — the smallest valid rrxiv paper.
 %
 % One claim, one piece of evidence, one citation, one open question.
-% Used as a parser conformance fixture: the rrvix-python parser must
+% Used as a parser conformance fixture: the rrxiv-python parser must
 % produce a CIR from this file that validates against cir.schema.json.
 %
 % Compile:
 %   tectonic --keep-intermediates minimal.tex
 %   # or: pdflatex minimal.tex && pdflatex minimal.tex
 
-\documentclass{rrvix}
+\documentclass{rrxiv}
 
-\rrvixid{rrvix-example-minimal}
-\rrvixversion{v1}
-\rrvixprotocolversion{0.1.0}
-\rrvixlicense{CC-BY-4.0}
-\rrvixtopics{example,conformance}
+\rrxivid{rrxiv-example-minimal}
+\rrxivversion{v1}
+\rrxivprotocolversion{0.1.0}
+\rrxivlicense{CC-BY-4.0}
+\rrxivtopics{example,conformance}
 
-\title{A minimal rrvix paper}
-\author{rrvix Project}
+\title{A minimal rrxiv paper}
+\author{rrxiv Project}
 \date{2026-05-04}
 
 \begin{document}
@@ -26,7 +26,7 @@
 \begin{abstract}
 This paper exists as a parser conformance fixture. It contains one claim,
 one piece of evidence, one citation, and one open question. Its only
-purpose is to round-trip through \texttt{rrvix-python}'s parser into a
+purpose is to round-trip through \texttt{rrxiv-python}'s parser into a
 valid Canonical Intermediate Representation (CIR).
 \end{abstract}
 
@@ -35,9 +35,9 @@ valid Canonical Intermediate Representation (CIR).
 
 \begin{claim}[Conformance fixture]
 \label{claim:fixture}
-A minimal rrvix paper, when compiled by \texttt{rrvix.cls} v0.1, emits a
-sidecar \texttt{*.rrvix.aux} file from which the rrvix parser can produce
-a CIR object that validates against \texttt{cir.schema.json}~\cite{rrvix-cir-schema} v0.1.0.
+A minimal rrxiv paper, when compiled by \texttt{rrxiv.cls} v0.1, emits a
+sidecar \texttt{*.rrxiv.aux} file from which the rrxiv parser can produce
+a CIR object that validates against \texttt{cir.schema.json}~\cite{rrxiv-cir-schema} v0.1.0.
 \end{claim}
 
 \begin{evidence}[CI conformance test]

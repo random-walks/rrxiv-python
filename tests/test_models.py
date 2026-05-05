@@ -3,7 +3,7 @@
 Construct each generated model with minimal kwargs, run a round-trip
 (model -> dict -> model), and verify the dict is JSON-serializable.
 
-Also: load every fixture from the rrvix repo's ``tests/schemas/fixtures/``
+Also: load every fixture from the rrxiv repo's ``tests/schemas/fixtures/``
 (if available), validate each one through the corresponding pydantic
 model, and check the verdict matches the filename convention
 (``*-valid-*`` must construct, ``*-invalid-*`` must raise).
@@ -18,7 +18,7 @@ from typing import Any, Final
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from rrvix.models import (
+from rrxiv.models import (
     CIR,
     Annotation,
     Author,
@@ -51,7 +51,7 @@ class TestSmokeConstruction:
     def test_paper_minimal(self) -> None:
         p = Paper.model_validate(
             {
-                "rrvix_version": "0.1.0",
+                "rrxiv_version": "0.1.0",
                 "id": "01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f",
                 "version": "v1",
                 "title": "T",
@@ -107,7 +107,7 @@ class TestSmokeConstruction:
     def test_cir_minimal(self) -> None:
         cir = CIR.model_validate(
             {
-                "rrvix_version": "0.1.0",
+                "rrxiv_version": "0.1.0",
                 "id": "p1",
                 "version": "v1",
                 "title": "Minimal CIR",
@@ -122,15 +122,15 @@ class TestSmokeConstruction:
         _roundtrip(cir)
 
 
-# ---- Fixture-driven tests against rrvix repo's tests/schemas/fixtures/ ----
+# ---- Fixture-driven tests against rrxiv repo's tests/schemas/fixtures/ ----
 
 
-def _find_rrvix_fixtures_dir() -> Path | None:
-    """Locate the rrvix repo's tests/schemas/fixtures/ if it sits next to us
-    in the workspace pattern (../rrvix/...)."""
+def _find_rrxiv_fixtures_dir() -> Path | None:
+    """Locate the rrxiv repo's tests/schemas/fixtures/ if it sits next to us
+    in the workspace pattern (../rrxiv/...)."""
     candidates = [
-        Path(__file__).resolve().parents[2] / "rrvix" / "tests" / "schemas" / "fixtures",
-        Path("/Users/blaise/Desktop/blaise-oss/rrvix-dev-workspace/repos/rrvix/tests/schemas/fixtures"),
+        Path(__file__).resolve().parents[2] / "rrxiv" / "tests" / "schemas" / "fixtures",
+        Path("/Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv/tests/schemas/fixtures"),
     ]
     for c in candidates:
         if c.is_dir() and any(c.glob("*.json")):
@@ -138,7 +138,7 @@ def _find_rrvix_fixtures_dir() -> Path | None:
     return None
 
 
-_FIXTURES_DIR = _find_rrvix_fixtures_dir()
+_FIXTURES_DIR = _find_rrxiv_fixtures_dir()
 
 
 _KIND_TO_MODEL: Final[dict[str, type[BaseModel]]] = {
@@ -162,14 +162,14 @@ def _classify(name: str) -> tuple[str, bool] | None:
     return kind, validity == "valid"
 
 
-@pytest.mark.skipif(_FIXTURES_DIR is None, reason="rrvix repo fixtures not available")
+@pytest.mark.skipif(_FIXTURES_DIR is None, reason="rrxiv repo fixtures not available")
 @pytest.mark.parametrize(
     "fixture_path",
     sorted(_FIXTURES_DIR.glob("*.json")) if _FIXTURES_DIR else [],
     ids=lambda p: p.name,
 )
 def test_pydantic_matches_ajv(fixture_path: Path) -> None:
-    """Every rrvix fixture must validate (or fail) the same way through
+    """Every rrxiv fixture must validate (or fail) the same way through
     pydantic as it does through ajv. Sanity: codegen output agrees with
     the JSON Schema it was generated from."""
     cls = _classify(fixture_path.stem)

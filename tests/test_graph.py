@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from rrvix.graph import ClaimGraph, CycleError, GraphEdge
-from rrvix.models import Claim
+from rrxiv.graph import ClaimGraph, CycleError, GraphEdge
+from rrxiv.models import Claim
 
 
 def _claim(
@@ -213,11 +213,11 @@ class TestOutputs:
 
 class TestFromCir:
     def test_minimal_cir(self) -> None:
-        from rrvix.models import CIR
+        from rrxiv.models import CIR
 
         cir = CIR.model_validate(
             {
-                "rrvix_version": "0.1.0",
+                "rrxiv_version": "0.1.0",
                 "id": "p1",
                 "version": "v1",
                 "title": "T",

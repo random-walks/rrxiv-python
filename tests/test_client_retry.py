@@ -1,4 +1,4 @@
-"""Tests for the 429 retry policy in the rrvix HTTP client."""
+"""Tests for the 429 retry policy in the rrxiv HTTP client."""
 
 from __future__ import annotations
 
@@ -8,15 +8,15 @@ from typing import Any
 import httpx
 import pytest
 
-from rrvix.client import (
+from rrxiv.client import (
     NO_RETRY_POLICY,
     NotFoundError,
     RateLimitedError,
     RetryPolicy,
-    RrvixClient,
+    RrxivClient,
     ServerError,
 )
-from rrvix.client.retry import (
+from rrxiv.client.retry import (
     RetryBudget,
     compute_wait,
     is_retryable_status,
@@ -26,10 +26,10 @@ from rrvix.client.retry import (
 
 def _client_with_handler(
     handler: Any, retry_policy: RetryPolicy | None = None
-) -> RrvixClient:
+) -> RrxivClient:
     transport = httpx.MockTransport(handler)
-    return RrvixClient(
-        "https://rrvix.org/api/v0",
+    return RrxivClient(
+        "https://rrxiv.com/api/v0",
         transport=transport,
         retry_policy=retry_policy,
     )
@@ -106,7 +106,7 @@ class TestRetryBudget:
         assert b.can_retry(2.0) is False  # 4 + 2 = 6 > 5
 
 
-# ---- Integration with RrvixClient ----
+# ---- Integration with RrxivClient ----
 
 
 class TestClientRetry:
@@ -120,7 +120,7 @@ class TestClientRetry:
             return httpx.Response(
                 200,
                 json={
-                    "rrvix_version": "0.1.0",
+                    "rrxiv_version": "0.1.0",
                     "id": "p1",
                     "version": "v1",
                     "title": "T",

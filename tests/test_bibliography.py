@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from rrvix.parser.bibliography import parse_bib, parse_thebibliography
+from rrxiv.parser.bibliography import parse_bib, parse_thebibliography
 
 
 def test_arxiv_entry() -> None:
@@ -43,19 +43,19 @@ def test_doi_entry() -> None:
 
 def test_url_entry() -> None:
     text = """
-@misc{rrvix-cir-schema,
-  author = {{rrvix Project}},
+@misc{rrxiv-cir-schema,
+  author = {{rrxiv Project}},
   title = {{Canonical Intermediate Representation Schema, v0.1.0}},
   year = {2026},
-  howpublished = {\\url{https://rrvix.org/schema/v0/cir.schema.json}},
+  howpublished = {\\url{https://rrxiv.com/schema/v0/cir.schema.json}},
   note = {JSON Schema 2020-12 definition.}
 }
 """
     entries = parse_bib(text)
     assert len(entries) == 1
     e = entries[0]
-    assert e.key == "rrvix-cir-schema"
-    assert "rrvix.org" in (e.url or "")
+    assert e.key == "rrxiv-cir-schema"
+    assert "rrxiv.com" in (e.url or "")
 
 
 def test_arxiv_from_url() -> None:
