@@ -45,6 +45,15 @@ from rrvix.client.errors import (
     UnauthorizedError,
     ValidationError,
 )
+from rrvix.client.retry import (
+    DEFAULT_RETRY_POLICY,
+    RetryBudget,
+    RetryPolicy,
+    compute_wait,
+    is_retryable_status,
+    parse_retry_after,
+    sleep_for,
+)
 from rrvix.models import (
     CIR,
     Annotation,
@@ -70,9 +79,11 @@ class RrvixClient:
         timeout: httpx.Timeout | None = None,
         transport: httpx.BaseTransport | None = None,
         user_agent: str = "rrvix-python/0.1",
+        retry_policy: RetryPolicy | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.auth = auth
+        self.retry_policy = retry_policy if retry_policy is not None else DEFAULT_RETRY_POLICY
         headers = {
             "User-Agent": user_agent,
             "Accept": "application/json",
@@ -270,19 +281,37 @@ class RrvixClient:
         json: Any = None,
         extra_headers: dict[str, str] | None = None,
     ) -> Any:
-        response = self._http.request(
-            method,
-            path,
-            params=params,
-            json=json,
-            headers=extra_headers,
-        )
-        if response.is_success:
-            if response.headers.get("content-type", "").startswith("application/json"):
-                return response.json()
-            return None
-        _raise_for_status(response)
-        return None  # unreachable; _raise_for_status always raises
+        budget = RetryBudget(self.retry_policy)
+        while True:
+            response = self._http.request(
+                method,
+                path,
+                params=params,
+                json=json,
+                headers=extra_headers,
+            )
+            if response.is_success:
+                if response.headers.get("content-type", "").startswith(
+                    "application/json"
+                ):
+                    return response.json()
+                return None
+
+            if not is_retryable_status(response.status_code, self.retry_policy):
+                _raise_for_status(response)
+
+            retry_after = parse_retry_after(response.headers.get("Retry-After"))
+            wait = compute_wait(
+                attempt=budget.attempts + 1,
+                policy=self.retry_policy,
+                retry_after_seconds=retry_after,
+            )
+            if not budget.can_retry(wait):
+                _raise_for_status(response)
+
+            sleep_for(wait)
+            budget.spend(wait)
+            # loop and retry
 
 
 def _drop_nulls(d: dict[str, Any]) -> dict[str, Any]:
