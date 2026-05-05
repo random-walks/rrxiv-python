@@ -2,15 +2,23 @@
 
 When a paper authored with ``rrvix.cls`` compiles, the class emits a
 sidecar file alongside the PDF: ``<basename>.rrvix.aux``. The file is
-line-oriented and contains markers in this format::
+line-oriented and contains markers in two formats:
+
+**v0.2 format (current — RRP-0002):**
 
     RRVIX:meta:<key>:<value>            # paper metadata fields
     RRVIX:<env>:<index>                 # one per claim/evidence/observation/...
-    RRVIX:edge:<edge_type>:<src>:<dst>  # claim-graph edges
+    RRVIX:edge:<edge_type>:<src>|<dst>  # claim-graph edges, pipe-separated IDs
 
-This module parses that file into a list of structured records. The
-parser/build module then pairs sidecar records with the matching source
-environments to produce a CIR.
+**v0.1 format (deprecated, still parsed with a warning):**
+
+    RRVIX:edge:<edge_type>:<src>:<dst>  # colons everywhere
+
+The v0.1 format was ambiguous because `:` joined ID components AND
+separated src from dst. RRP-0002 changed the separator to `|`. The
+parser still accepts the v0.1 format via a midpoint-split heuristic,
+emitting a ``DeprecationWarning`` per file containing v0.1 edges so
+authors know to recompile with the v0.2 cls.
 
 Sidecar emission is line-buffered TeX ``\\write`` output, so the file
 may be missing trailing newlines or contain blank lines; the parser is
@@ -19,6 +27,7 @@ tolerant of both.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -98,10 +107,17 @@ def parse_sidecar_text(text: str) -> Sidecar:
     sidecar format is line-prefixed (``RRVIX:``) precisely so that future
     versions of ``rrvix.cls`` can introduce new prefixes without breaking
     older parsers.
+
+    If the input contains v0.1-format edges (colon-joined ``src:dst`` rather
+    than v0.2's ``src|dst``), emits a single ``DeprecationWarning`` per
+    parse call so authors know to recompile with the v0.2 cls.
     """
     metas: list[MetaMarker] = []
     envs: list[EnvMarker] = []
     edges: list[EdgeMarker] = []
+
+    # Per-call latch: only warn once even if many v0.1 edges appear.
+    _v01_deprecation_seen = [False]
 
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -117,25 +133,31 @@ def parse_sidecar_text(text: str) -> Sidecar:
             metas.append(MetaMarker(key=parts[1], value=value))
             continue
 
-        if head == "edge" and len(parts) >= 4 and parts[1] in _EDGE_KINDS:
+        if head == "edge" and len(parts) >= 3 and parts[1] in _EDGE_KINDS:
             edge_type: EdgeKind = parts[1]  # type: ignore[assignment]
-            # FIXME(v0.2): rrvix.cls writes `RRVIX:edge:<type>:<src>:<dst>` with
-            # `:` joining src and dst, but `:` is ALSO the conventional
-            # separator inside IDs (paper_id:claim:label). The format is
-            # genuinely ambiguous without a delimiter change. The
-            # midpoint-split heuristic below works as long as src and dst
-            # have the same colon count, which is true for the canonical
-            # `<paper_id>:claim:<label>` shape but breaks otherwise. Track
-            # the cls change in a future RRP.
-            id_tokens = parts[2:]
-            if len(id_tokens) % 2 != 0:
-                # Odd token count: best-effort, take the last token as dst.
-                source = ":".join(id_tokens[:-1])
-                target = id_tokens[-1]
+            # Reconstruct the suffix after `RRVIX:edge:<type>:` so we can
+            # check for the v0.2 pipe delimiter, which the colon-tokenisation
+            # above would have split.
+            suffix = line[len(f"RRVIX:edge:{edge_type}:") :]
+
+            if "|" in suffix:
+                # v0.2 (RRP-0002) format: src|dst, unambiguous.
+                source, target = suffix.split("|", 1)
             else:
-                mid = len(id_tokens) // 2
-                source = ":".join(id_tokens[:mid])
-                target = ":".join(id_tokens[mid:])
+                # v0.1 fallback: midpoint-split on colons. Works only when
+                # src and dst share the same colon count, which is true for
+                # the canonical `<paper_id>:claim:<label>` shape but
+                # ambiguous in general.
+                _v01_deprecation_seen[0] = True
+                id_tokens = parts[2:]
+                if len(id_tokens) % 2 != 0:
+                    source = ":".join(id_tokens[:-1])
+                    target = id_tokens[-1]
+                else:
+                    mid = len(id_tokens) // 2
+                    source = ":".join(id_tokens[:mid])
+                    target = ":".join(id_tokens[mid:])
+
             if not source or not target:
                 continue
             edges.append(EdgeMarker(edge_type=edge_type, source=source, target=target))
@@ -148,6 +170,16 @@ def parse_sidecar_text(text: str) -> Sidecar:
             continue
 
         # Unrecognised RRVIX:* line — skip silently.
+
+    if _v01_deprecation_seen[0]:
+        warnings.warn(
+            "Sidecar contains v0.1-format edges (colon-joined). The format is "
+            "ambiguous when source/target IDs contain colons. Recompile with "
+            "rrvix.cls v0.2 or later, which uses '|' as the src/dst delimiter "
+            "(see RRP-0002).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     return Sidecar(meta=tuple(metas), envs=tuple(envs), edges=tuple(edges))
 

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import warnings
+
+import pytest
+
 from rrvix.parser.sidecar import (
     EnvMarker,
     MetaMarker,
@@ -48,7 +52,7 @@ RRVIX:meta:topics:infrastructure,scientific-publishing,ai-research,protocol-desi
 RRVIX:claim:1
 RRVIX:observation:1
 RRVIX:claim:2
-RRVIX:edge:depends_on:rrvix-0001:claim:queryability:rrvix-0001:claim:volume-structure
+RRVIX:edge:depends_on:rrvix-0001:claim:queryability|rrvix-0001:claim:volume-structure
 RRVIX:remark:1
 RRVIX:evidence:1
 RRVIX:scope:1
@@ -104,7 +108,7 @@ def test_unknown_env_kind_skipped() -> None:
 
 
 def test_unknown_edge_kind_skipped() -> None:
-    text = "RRVIX:edge:depends_on:a:b\nRRVIX:edge:newrel:c:d\n"
+    text = "RRVIX:edge:depends_on:a|b\nRRVIX:edge:newrel:c|d\n"
     sc = parse_sidecar_text(text)
     assert len(sc.edges) == 1
     assert sc.edges[0].edge_type == "depends_on"
@@ -123,12 +127,43 @@ RRVIX:meta:id:p1
     assert sc.meta_dict() == {"id": "p1"}
 
 
-def test_edge_with_colons_in_ids() -> None:
-    """Source/target IDs commonly contain colons (paper_id:label)."""
+def test_v01_edge_with_colons_in_ids_emits_deprecation() -> None:
+    """v0.1 colon-joined edges are still parsed (heuristic) but warn."""
     text = "RRVIX:edge:supports:p1:claim:foo:p2:claim:bar\n"
-    sc = parse_sidecar_text(text)
+    with pytest.warns(DeprecationWarning, match="RRP-0002"):
+        sc = parse_sidecar_text(text)
     assert sc.edges[0].source == "p1:claim:foo"
     assert sc.edges[0].target == "p2:claim:bar"
+
+
+def test_v02_pipe_edge_no_warning() -> None:
+    """v0.2 pipe-separated edges parse cleanly with no warning."""
+    text = "RRVIX:edge:supports:p1:claim:foo|p2:claim:bar\n"
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any warning becomes a test failure
+        sc = parse_sidecar_text(text)
+    assert sc.edges[0].source == "p1:claim:foo"
+    assert sc.edges[0].target == "p2:claim:bar"
+
+
+def test_v02_pipe_edge_handles_unusual_ids() -> None:
+    """v0.2 format unambiguously preserves IDs with arbitrary colon counts."""
+    text = "RRVIX:edge:depends_on:arxiv:2305.12345|p2:claim:foo:bar:baz\n"
+    sc = parse_sidecar_text(text)
+    assert sc.edges[0].source == "arxiv:2305.12345"
+    assert sc.edges[0].target == "p2:claim:foo:bar:baz"
+
+
+def test_v01_warning_fires_only_once_per_call() -> None:
+    """Even with many v0.1 edges in one file, only one DeprecationWarning."""
+    text = "\n".join(
+        f"RRVIX:edge:depends_on:p1:claim:c{i}:p2:claim:d{i}" for i in range(5)
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        parse_sidecar_text(text)
+    deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+    assert len(deprecations) == 1
 
 
 def test_empty_input() -> None:
