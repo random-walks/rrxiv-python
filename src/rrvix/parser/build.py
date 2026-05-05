@@ -26,7 +26,7 @@ from typing import Any
 from rrvix.models import (
     CIR,
 )
-from rrvix.parser.bibliography import BibEntry, parse_bib_file
+from rrvix.parser.bibliography import BibEntry, parse_bib_file, parse_thebibliography
 from rrvix.parser.clean import tex_to_text
 from rrvix.parser.sidecar import (
     EdgeMarker,
@@ -161,17 +161,32 @@ def _build_citations(
     bib_entries: list[BibEntry],
     paper_id: str,
 ) -> list[dict[str, Any]]:
+    """Emit Citation records.
+
+    Two sources are merged:
+
+    - Keys explicitly cited via ``\\cite{...}`` in the body. These get
+      Citation records whether or not a .bib entry resolves them — a
+      dangling cite is preserved so the reference isn't lost.
+    - Keys that appear in any bibliography entry (.bib OR
+      ``\\bibitem`` inside a ``thebibliography`` block) but aren't
+      explicitly cited. These are emitted too: the bibliography listing
+      counts as an implicit citation.
+    """
     by_key = {e.key: e for e in bib_entries}
     cited_keys: set[str] = set()
     for cite in tex.citations:
         cited_keys.update(cite.keys)
 
+    # Union: explicit cites + everything in the bibliography.
+    all_keys = cited_keys | set(by_key.keys())
+
     citations: list[dict[str, Any]] = []
-    for key in sorted(cited_keys):
+    for key in sorted(all_keys):
         entry = by_key.get(key)
         if entry is None:
-            # \cite key with no .bib entry — emit a minimal citation so
-            # we don't lose the reference.
+            # \cite key with no resolving entry — emit a minimal citation
+            # so we don't lose the reference.
             citations.append(
                 {
                     "id": f"cite-{paper_id}:{key}",
@@ -256,7 +271,8 @@ def build_cir(
     meta = sidecar.meta_dict()
 
     # Bibliography: prefer explicit path, else look up the first
-    # \bibliography{NAME} reference and resolve it as ./NAME.bib
+    # \bibliography{NAME} reference and resolve it as ./NAME.bib, else
+    # fall back to inline \begin{thebibliography} blocks in the source.
     bib_entries: list[BibEntry] = []
     if bib_path is not None:
         bib_entries = parse_bib_file(bib_path)
@@ -264,6 +280,17 @@ def build_cir(
         bib_candidate = tex_path.parent / f"{tex.bibliography_files[0]}.bib"
         if bib_candidate.is_file():
             bib_entries = parse_bib_file(bib_candidate)
+
+    # Always also scan the .tex for inline thebibliography entries; some
+    # papers (the rrvix whitepaper among them) inline their bibliography
+    # rather than ship a .bib. Merge by key, preferring the .bib entry
+    # if both are present.
+    inline_entries = parse_thebibliography(tex_path.read_text(encoding="utf-8"))
+    seen_keys = {e.key for e in bib_entries}
+    for ie in inline_entries:
+        if ie.key not in seen_keys:
+            bib_entries.append(ie)
+            seen_keys.add(ie.key)
 
     paper_id = meta.get("id") or tex.metadata.rrvix_id or tex_path.stem
 

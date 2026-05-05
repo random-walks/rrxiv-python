@@ -1,12 +1,21 @@
-"""Bibliography (.bib) parser, used to populate Citation objects.
+"""Bibliography parsing for rrvix.
 
-We use ``bibtexparser`` (a dev dep) for the heavy lifting. This module
-provides the thin layer that turns ``bibtexparser`` records into
-structured data the build module can hand to the Citation schema.
+Two paths into Citation records:
+
+1. **External .bib file** referenced via ``\\bibliography{NAME}`` in the
+   .tex source. Parsed by :func:`parse_bib` using ``bibtexparser`` v1.x.
+2. **Inline ``thebibliography`` block** with ``\\bibitem[...]{key}``
+   entries in the .tex source itself. Parsed by
+   :func:`parse_thebibliography`. Used by papers (including the rrvix
+   whitepaper) that don't ship a separate .bib.
+
+Both paths return :class:`BibEntry` records with the same shape; the
+build module merges them when both are present.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -95,3 +104,71 @@ def parse_bib(text: str) -> list[BibEntry]:
 def parse_bib_file(path: Path | str) -> list[BibEntry]:
     """Read and parse a .bib file from disk."""
     return parse_bib(Path(path).read_text(encoding="utf-8"))
+
+
+# ---- thebibliography fallback ----
+
+_RE_THEBIB = re.compile(
+    r"\\begin\{thebibliography\}(?:\{[^{}]*\})?(.*?)\\end\{thebibliography\}",
+    re.DOTALL,
+)
+# Match \bibitem[label]{key} or \bibitem{key}; capture key and (optional) label.
+# The body of one entry runs until the next \bibitem or the end of the block.
+_RE_BIBITEM = re.compile(
+    r"\\bibitem\s*(?:\[([^\]]*)\])?\s*\{([^{}]+)\}(.*?)(?=\\bibitem|\Z)",
+    re.DOTALL,
+)
+_RE_DOI_IN_TEXT = re.compile(r"10\.[0-9]{4,9}/[-._;()/:a-zA-Z0-9]+")
+_RE_ARXIV_IN_TEXT = re.compile(r"arXiv\s*:?\s*([0-9]{4}\.[0-9]{4,5})", re.IGNORECASE)
+_RE_URL_IN_TEXT = re.compile(r"https?://[^\s,)\\]+")
+
+
+def _strip_trailing_punct(s: str) -> str:
+    """Strip trailing punctuation introduced by the surrounding sentence."""
+    return s.rstrip(".,;:)]}")
+
+
+def parse_thebibliography(tex_source: str) -> list[BibEntry]:
+    """Extract \\bibitem entries from any \\begin{thebibliography} block.
+
+    Each entry's body becomes the ``note`` field. Heuristics extract DOIs,
+    arXiv IDs, and URLs from the body text into typed fields so the build
+    module can populate :class:`rrvix.models.Citation` accurately.
+    """
+    entries: list[BibEntry] = []
+    for block_match in _RE_THEBIB.finditer(tex_source):
+        body = block_match.group(1)
+        for item in _RE_BIBITEM.finditer(body):
+            label = (item.group(1) or "").strip()
+            key = item.group(2).strip()
+            text = item.group(3).strip()
+
+            fields: dict[str, str] = {}
+            if label:
+                fields["label"] = label
+            if text:
+                fields["note"] = text
+            doi_m = _RE_DOI_IN_TEXT.search(text)
+            if doi_m:
+                fields["doi"] = _strip_trailing_punct(doi_m.group(0))
+            arxiv_m = _RE_ARXIV_IN_TEXT.search(text)
+            if arxiv_m:
+                fields["eprint"] = arxiv_m.group(1)
+                fields["archiveprefix"] = "arXiv"
+            url_m = _RE_URL_IN_TEXT.search(text)
+            if url_m:
+                fields["url"] = _strip_trailing_punct(url_m.group(0))
+
+            # Reconstruct a synthesised BibTeX-shaped raw entry for the
+            # bibtex_entry field of the resulting Citation.
+            body_lines = ",\n".join(f"  {k} = {{{v}}}" for k, v in fields.items())
+            raw = f"@misc{{{key},\n{body_lines}\n}}"
+            entries.append(
+                BibEntry(
+                    key=key,
+                    entry_type="misc",
+                    fields=fields,
+                    raw=raw,
+                )
+            )
+    return entries
