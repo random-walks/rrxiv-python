@@ -11,6 +11,11 @@ from typing import Annotated
 import typer
 from pydantic import ValidationError
 
+from rrvix.annotations import (
+    AnnotationPayloadError,
+    load_annotations_file,
+    validate_annotation_payload,
+)
 from rrvix.graph import ClaimGraph
 from rrvix.models import CIR
 from rrvix.parser import build_cir
@@ -25,6 +30,12 @@ app = typer.Typer(
     no_args_is_help=True,
     help="rrvix — reference client for the rrvix protocol",
 )
+
+annotation_app = typer.Typer(
+    no_args_is_help=True,
+    help="Annotation utilities (load, validate).",
+)
+app.add_typer(annotation_app, name="annotation")
 
 
 @app.command()
@@ -126,6 +137,59 @@ def graph(
     else:
         output.write_text(text + "\n", encoding="utf-8")
         typer.echo(f"Wrote graph to {output}", err=True)
+
+
+@annotation_app.command("validate")
+def annotation_validate(
+    file: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to a JSON file with one annotation (object) or an array of annotations.",
+        ),
+    ],
+    strict: Annotated[
+        bool,
+        typer.Option(
+            "--strict/--no-strict",
+            help="If --strict (default), also validate per-type structured_payload shapes.",
+        ),
+    ] = True,
+) -> None:
+    """Validate annotations against the schema, optionally per-type strict.
+
+    Without ``--strict``, this checks only that each annotation matches the
+    base ``annotation.schema.json``. With ``--strict`` (the default), each
+    annotation's ``structured_payload`` is also checked against the
+    per-type schema documented in ``spec/0006-annotations.md``.
+    """
+    try:
+        annotations = load_annotations_file(file)
+    except ValidationError as e:
+        typer.echo(f"FAIL: {file} contains invalid annotation(s):\n{e}", err=True)
+        sys.exit(1)
+    except (json.JSONDecodeError, ValueError) as e:
+        typer.echo(f"FAIL: {file} is not loadable: {e}", err=True)
+        sys.exit(1)
+
+    if strict:
+        bad: list[str] = []
+        for i, ann in enumerate(annotations):
+            try:
+                validate_annotation_payload(ann)
+            except AnnotationPayloadError as e:
+                bad.append(f"  [{i}] {ann.id}: {e}")
+        if bad:
+            typer.echo(
+                f"FAIL: {len(bad)} annotation(s) had invalid payloads:", err=True
+            )
+            for line in bad:
+                typer.echo(line, err=True)
+            sys.exit(1)
+
+    typer.echo(
+        f"OK: {len(annotations)} annotation(s) validate"
+        + (" (incl. per-type payloads)." if strict else " (base schema only).")
+    )
 
 
 if __name__ == "__main__":
