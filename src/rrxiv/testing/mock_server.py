@@ -56,6 +56,21 @@ class MockRrxivServer:
     require_auth_for_writes: bool = True
     rate_limit_after: int | None = None
 
+    # Auth state. Tests can pre-populate or introspect.
+    orcid_id_for_code: dict[str, str] = field(default_factory=dict)
+    """Maps an OAuth ``code`` → the ORCID iD the mock should return on
+    callback. Unknown codes get ``"0000-0000-0000-0000"``."""
+
+    taken_agent_handles: set[str] = field(default_factory=set)
+    """Agent handles already enrolled. Re-enrolling the same handle
+    returns 403."""
+
+    live_anonymous_challenges: set[str] = field(default_factory=set)
+    """Currently-issued challenge IDs. Verified-once-and-expired."""
+
+    anonymous_site_key: str = "10000000-ffff-ffff-ffff-000000000001"
+    """hCaptcha-shaped site key returned in challenge responses."""
+
     request_count: int = 0
     """How many requests the mock has served. Tests can introspect."""
 
@@ -201,6 +216,80 @@ class MockRrxivServer:
             if self.latest_snapshot is None:
                 return _not_found("latest snapshot")
             return _json_ok(self.latest_snapshot)
+
+        # Auth — token-acquisition endpoints. Validation here is loose;
+        # the mock issues a deterministic token derived from the
+        # request so tests can assert wire shape without a live IdP.
+        if method == "POST" and path == "/auth/orcid/callback":
+            try:
+                body = json.loads(request.content)
+            except json.JSONDecodeError:
+                return _problem(400, "Bad Request", "body is not JSON")
+            code = body.get("code")
+            if not code:
+                return _problem(400, "Bad Request", "missing code")
+            return _json_ok(
+                {
+                    "token": f"orcid-tok-{code}",
+                    "orcid_id": self.orcid_id_for_code.get(
+                        code, "0000-0000-0000-0000"
+                    ),
+                    "expires_in_seconds": 3600,
+                }
+            )
+        if method == "POST" and path == "/auth/agent/enroll":
+            try:
+                body = json.loads(request.content)
+            except json.JSONDecodeError:
+                return _problem(400, "Bad Request", "body is not JSON")
+            for required in ("handle", "public_key_b64", "payload_b64", "signature_b64"):
+                if required not in body:
+                    return _problem(400, "Bad Request", f"missing {required}")
+            handle = body["handle"]
+            if not handle.startswith("@"):
+                return _problem(422, "Validation Error", "handle must start with @")
+            if handle in self.taken_agent_handles:
+                return _problem(403, "Forbidden", f"handle {handle} already taken")
+            self.taken_agent_handles.add(handle)
+            return _json_ok(
+                {
+                    "token": f"agent-tok-{handle.lstrip('@')}",
+                    "handle": handle,
+                    "expires_in_seconds": 86400,
+                },
+                status=201,
+            )
+        if method == "POST" and path == "/auth/anonymous/challenge":
+            challenge_id = f"chal-{uuid.uuid4().hex[:8]}"
+            self.live_anonymous_challenges.add(challenge_id)
+            return _json_ok(
+                {
+                    "challenge_id": challenge_id,
+                    "challenge_type": "hcaptcha",
+                    "site_key": self.anonymous_site_key,
+                    "expires_in_seconds": 300,
+                }
+            )
+        if method == "POST" and path == "/auth/anonymous/verify":
+            try:
+                body = json.loads(request.content)
+            except json.JSONDecodeError:
+                return _problem(400, "Bad Request", "body is not JSON")
+            challenge_id = body.get("challenge_id")
+            response = body.get("response")
+            if not challenge_id or not response:
+                return _problem(
+                    400, "Bad Request", "challenge_id and response required"
+                )
+            if challenge_id not in self.live_anonymous_challenges:
+                return _problem(401, "Unauthorized", "challenge expired or unknown")
+            self.live_anonymous_challenges.discard(challenge_id)
+            return _json_ok(
+                {
+                    "token": f"anon-tok-{challenge_id}",
+                    "expires_in_seconds": 3600,
+                }
+            )
 
         # Default: 404 with a helpful message
         return _problem(404, "Not Found", f"{method} {path} not handled by mock")

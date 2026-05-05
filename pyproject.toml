@@ -16,12 +16,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+agent = [
+    "cryptography>=42.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "ruff>=0.5",
     "mypy>=1.10",
     "datamodel-code-generator>=0.25",
+    "cryptography>=42.0",
 ]
 
 [project.scripts]

@@ -35,15 +35,7 @@ import httpx
 
 from rrxiv.client.auth import BearerToken, header
 from rrxiv.client.errors import (
-    BadRequestError,
-    ForbiddenError,
-    IdempotencyKeyConflictError,
-    NotFoundError,
-    RateLimitedError,
-    RrxivError,
-    ServerError,
-    UnauthorizedError,
-    ValidationError,
+    raise_for_status,
 )
 from rrxiv.client.retry import (
     DEFAULT_RETRY_POLICY,
@@ -298,7 +290,7 @@ class RrxivClient:
                 return None
 
             if not is_retryable_status(response.status_code, self.retry_policy):
-                _raise_for_status(response)
+                raise_for_status(response)
 
             retry_after = parse_retry_after(response.headers.get("Retry-After"))
             wait = compute_wait(
@@ -307,7 +299,7 @@ class RrxivClient:
                 retry_after_seconds=retry_after,
             )
             if not budget.can_retry(wait):
-                _raise_for_status(response)
+                raise_for_status(response)
 
             sleep_for(wait)
             budget.spend(wait)
@@ -320,44 +312,3 @@ def _drop_nulls(d: dict[str, Any]) -> dict[str, Any]:
 
 def _gen_idempotency_key() -> str:
     return f"rrxiv-py-{uuid.uuid4()}"
-
-
-def _raise_for_status(response: httpx.Response) -> None:
-    """Map status code to a typed error."""
-    problem: dict[str, Any] = {}
-    if response.headers.get("content-type", "").startswith("application/problem+json"):
-        try:
-            problem = response.json()
-        except ValueError:
-            pass
-    detail = problem.get("detail") or response.reason_phrase or "request failed"
-    title = problem.get("title")
-    msg = f"{title}: {detail}" if title else detail
-
-    cls: type[RrxivError]
-    extra: dict[str, Any] = {"status_code": response.status_code, "problem": problem}
-    if response.status_code == 400:
-        cls = BadRequestError
-    elif response.status_code == 401:
-        cls = UnauthorizedError
-    elif response.status_code == 403:
-        cls = ForbiddenError
-    elif response.status_code == 404:
-        cls = NotFoundError
-    elif response.status_code == 409:
-        cls = IdempotencyKeyConflictError
-    elif response.status_code == 422:
-        cls = ValidationError
-    elif response.status_code == 429:
-        retry_after = response.headers.get("Retry-After")
-        retry_after_seconds = int(retry_after) if retry_after and retry_after.isdigit() else None
-        raise RateLimitedError(
-            msg,
-            retry_after_seconds=retry_after_seconds,
-            problem=problem,
-        )
-    elif 500 <= response.status_code < 600:
-        cls = ServerError
-    else:
-        cls = RrxivError
-    raise cls(msg, **extra)

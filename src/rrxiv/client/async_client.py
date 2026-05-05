@@ -27,8 +27,8 @@ from rrxiv.client.client import (
     DEFAULT_TIMEOUT,
     _drop_nulls,
     _gen_idempotency_key,
-    _raise_for_status,
 )
+from rrxiv.client.errors import raise_for_status
 from rrxiv.client.retry import (
     DEFAULT_RETRY_POLICY,
     RetryBudget,
@@ -304,7 +304,7 @@ class AsyncRrxivClient:
                 return None
 
             if not is_retryable_status(response.status_code, self.retry_policy):
-                _raise_for_status(response)
+                raise_for_status(response)
 
             retry_after = parse_retry_after(response.headers.get("Retry-After"))
             wait = compute_wait(
@@ -313,7 +313,7 @@ class AsyncRrxivClient:
                 retry_after_seconds=retry_after,
             )
             if not budget.can_retry(wait):
-                _raise_for_status(response)
+                raise_for_status(response)
 
             await _async_sleep_for(wait)
             budget.spend(wait)

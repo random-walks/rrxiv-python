@@ -6,6 +6,10 @@ All notable changes to `rrxiv-python` are recorded here. The format is loosely b
 
 ### Added
 
+- `rrxiv.auth` module — token-acquisition flows for ORCID OAuth, agent enrollment (Ed25519), and anonymous attestation (hCaptcha) per [RRP-0005](https://github.com/random-walks/rrxiv/blob/main/proposals/0005-token-acquisition.md). Includes helpers (`build_orcid_authorization_url`, `exchange_orcid_code`, `enroll_agent`, `request_anonymous_challenge`, `verify_anonymous_challenge`) and request/response dataclasses for each flow. Optional `[agent]` extra pulls in `cryptography` for keypair signing.
+- `rrxiv.client.errors.raise_for_status` — public status-code-to-exception mapper, shared by the sync client, async client, and auth flow helpers.
+- `MockRrxivServer` handlers for the five `/auth/*` endpoints (orcid callback, agent enroll, anonymous challenge/verify) so client tests can exercise wire shape without a real server.
+- TeX parser now uses `pylatexenc.latexwalker` (AST-based) per [RRP-0004](https://github.com/random-walks/rrxiv/blob/main/proposals/0004-tex-parser-ast.md) — comments and math mode no longer leak into extractors; multi-optional-arg macros parse correctly.
 - `rrxiv doctor` — health check for the package + environment.
 - `rrxiv diff` — semantic diff between two CIRs (claims, edges, citations, annotations, top-level fields).
 - `rrxiv init` — scaffold a new rrxiv paper directory with a bundled `rrxiv.cls`.
