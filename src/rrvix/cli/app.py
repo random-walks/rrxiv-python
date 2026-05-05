@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import enum
 import json
 import sys
 from pathlib import Path
@@ -10,8 +11,15 @@ from typing import Annotated
 import typer
 from pydantic import ValidationError
 
+from rrvix.graph import ClaimGraph
 from rrvix.models import CIR
 from rrvix.parser import build_cir
+
+
+class GraphFormat(enum.StrEnum):
+    mermaid = "mermaid"
+    dot = "dot"
+    json = "json"
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -73,6 +81,51 @@ def validate(
         typer.echo(f"FAIL: {file} does not validate as a CIR:\n{e}", err=True)
         sys.exit(1)
     typer.echo(f"OK: {file} validates as a CIR.")
+
+
+@app.command()
+def graph(
+    file: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to a CIR JSON file or a .tex source. If .tex, it's parsed first.",
+        ),
+    ],
+    fmt: Annotated[
+        GraphFormat,
+        typer.Option("--format", "-f", help="Output format."),
+    ] = GraphFormat.mermaid,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Where to write the output. Default: stdout."),
+    ] = None,
+) -> None:
+    """Dump the claim graph from a CIR (or a .tex parsed on the fly).
+
+    The Mermaid output can be pasted into a Markdown file rendered by any
+    Mermaid-aware viewer (GitHub, mkdocs-material). The DOT output feeds
+    Graphviz. The JSON output is the structured graph view, suitable for
+    further processing.
+    """
+    if file.suffix == ".tex":
+        cir = build_cir(file)
+    else:
+        cir = CIR.model_validate(json.loads(file.read_text(encoding="utf-8")))
+
+    g = ClaimGraph.from_cir(cir)
+
+    if fmt is GraphFormat.mermaid:
+        text = g.to_mermaid()
+    elif fmt is GraphFormat.dot:
+        text = g.to_dot()
+    else:  # json
+        text = json.dumps(g.to_dict(), indent=2)
+
+    if output is None:
+        typer.echo(text)
+    else:
+        output.write_text(text + "\n", encoding="utf-8")
+        typer.echo(f"Wrote graph to {output}", err=True)
 
 
 if __name__ == "__main__":
