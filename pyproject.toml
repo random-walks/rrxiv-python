@@ -26,6 +26,7 @@ cli = [
 server = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
     "cryptography>=42.0",
     "http-message-signatures>=2.0,<3",
 ]
@@ -39,6 +40,7 @@ dev = [
     "http-message-signatures>=2.0,<3",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
     "keyring>=25",
 ]
 

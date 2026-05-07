@@ -110,12 +110,27 @@ class MemoryStore:
     ) -> None:
         self.state.idempotency[(token, key)] = entry
 
+    # ----- Sources -----
+    def save_source(self, paper_id: str, blob: bytes) -> str:
+        self.state.sources[paper_id] = blob
+        return f"/api/v0/papers/{paper_id}/source"
+
+    def load_source(self, paper_id: str) -> bytes | None:
+        return self.state.sources.get(paper_id)
+
     # ----- Snapshots -----
     def latest_snapshot(self) -> dict[str, Any] | None:
         return self.state.latest_snapshot
 
     def set_latest_snapshot(self, manifest: dict[str, Any]) -> None:
         self.state.latest_snapshot = dict(manifest)
+
+    def save_snapshot_blob(self, snapshot_id: str, blob: bytes) -> str:
+        self.state.snapshot_blobs[snapshot_id] = blob
+        return f"/api/v0/snapshots/{snapshot_id}"
+
+    def load_snapshot_blob(self, snapshot_id: str) -> bytes | None:
+        return self.state.snapshot_blobs.get(snapshot_id)
 
     # ----- Rate limiting (sliding window, 60 seconds) -----
     def record_request(self, token_or_ip: str, now_unix: int) -> int:

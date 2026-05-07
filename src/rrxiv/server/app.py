@@ -12,9 +12,16 @@ from rrxiv.server.auth.router import router as auth_router
 from rrxiv.server.claims.router import router as claims_router
 from rrxiv.server.errors import install_exception_handlers
 from rrxiv.server.papers.router import router as papers_router
+from rrxiv.server.search.router import router as search_router
 from rrxiv.server.settings import ServerSettings
 from rrxiv.server.snapshots.router import router as snapshots_router
 from rrxiv.server.store import MemoryStore, Store
+from rrxiv.server.submissions.router import (
+    router as submissions_router,
+)
+from rrxiv.server.submissions.router import (
+    sources_router,
+)
 
 PROTOCOL_VERSION = "0.1.0"
 API_PREFIX = "/api/v0"
@@ -69,9 +76,12 @@ def build_app(
 
     api.include_router(auth_router)
     api.include_router(papers_router)
+    api.include_router(sources_router)
+    api.include_router(submissions_router)
     api.include_router(claims_router)
     api.include_router(annotations_router)
     api.include_router(snapshots_router)
+    api.include_router(search_router)
     app.include_router(api, prefix=API_PREFIX)
 
     if settings.enable_cors:
