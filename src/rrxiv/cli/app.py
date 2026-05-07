@@ -64,6 +64,25 @@ def logout(
 
 # Serve (RRP-0008).
 @app.command()
+def conformance(
+    server: Annotated[
+        str,
+        typer.Argument(help="API base URL, e.g. http://127.0.0.1:8000/api/v0"),
+    ],
+    keep_state: Annotated[
+        bool, typer.Option("--keep-state/--clean")
+    ] = False,
+) -> None:
+    """Run the canonical conformance suite against any rrxiv server.
+
+    Useful for validating other-language client+server pairs.
+    """
+    from rrxiv.cli.conformance import conformance as _conformance
+
+    _conformance(server=server, keep_state=keep_state)
+
+
+@app.command()
 def serve(
     host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port")] = 8000,
