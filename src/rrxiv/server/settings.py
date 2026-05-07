@@ -29,6 +29,10 @@ class ServerSettings:
     orcid_client_secret: str | None = None
     orcid_authorize_url: str = "https://orcid.org/oauth/authorize"
     orcid_token_url: str = "https://orcid.org/oauth/token"
+    orcid_redirect_uri: str | None = None
+    """The redirect_uri registered with ORCID for ``orcid_client_id``.
+    Required for the paste-back render flow in production; the server
+    sends it to ORCID's token endpoint as part of code exchange."""
     orcid_dev_id: str = "0000-0001-0000-DEV1"
     """ORCID iD returned in dev mode."""
 
@@ -105,6 +109,9 @@ class ServerSettings:
                 "ORCID_AUTHORIZE_URL", cls.orcid_authorize_url
             ),
             orcid_token_url=get_str_required("ORCID_TOKEN_URL", cls.orcid_token_url),
+            orcid_redirect_uri=get_str(
+                "ORCID_REDIRECT_URI", cls.orcid_redirect_uri
+            ),
             orcid_dev_id=get_str_required("ORCID_DEV_ID", cls.orcid_dev_id),
             hcaptcha_secret=get_str("HCAPTCHA_SECRET", cls.hcaptcha_secret),
             hcaptcha_site_key=get_str_required(

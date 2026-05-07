@@ -176,24 +176,23 @@ def test_login_anonymous_paste_flow(
 def test_login_orcid_paste_fallback(
     cred_env: Path, reference_server: Any
 ) -> None:
-    """``--no-browser`` paste flow.
+    """``--no-browser`` paste flow — drives the real /auth/orcid/render
+    endpoint to mint a paste code."""
+    import re
 
-    We pre-seed the server's paste_codes table (the render endpoint is
-    out of scope for v0.1; paste codes only come from a future render
-    endpoint). This test exercises the CLI side of the paste flow.
-    """
-    from rrxiv.server.store.protocol import PasteCodeEntry
-
-    app_ = reference_server["app"]
-    app_.state.store.add_paste_code(
-        PasteCodeEntry(
-            code="TEST-PASTE-CODE",
-            orcid_id="0000-0001-2345-6789",
-            issued_at_unix=int(time.time()),
-            expires_at_unix=int(time.time()) + 300,
+    # 1. Hit the render endpoint as a "browser" would after ORCID
+    # OAuth. In dev mode the server accepts a dev-prefixed code.
+    with httpx.Client() as c:
+        render = c.get(
+            f"{reference_server['url']}/auth/orcid/render",
+            params={"code": "dev-paste-fallback", "state": "x"},
         )
-    )
+    assert render.status_code == 200, render.text
+    m = re.search(r"RRXIV-[A-F0-9]{4}-[A-F0-9]{4}", render.text)
+    assert m is not None
+    paste_code = m.group(0)
 
+    # 2. CLI redeems it.
     runner = CliRunner()
     result = runner.invoke(
         app,
@@ -204,12 +203,13 @@ def test_login_orcid_paste_fallback(
             reference_server["url"],
             "--no-browser",
         ],
-        input="TEST-PASTE-CODE\n",
+        input=f"{paste_code}\n",
     )
     assert result.exit_code == 0, result.output
     bearer = load_bearer(reference_server["url"], "orcid")
     assert bearer is not None
-    assert bearer.identity == "0000-0001-2345-6789"
+    # Dev mode returns the configured dev iD.
+    assert bearer.identity == reference_server["app"].state.settings.orcid_dev_id
 
 
 def test_login_orcid_loopback_simulated(

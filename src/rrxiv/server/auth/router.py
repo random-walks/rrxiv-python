@@ -22,13 +22,18 @@ import uuid
 from base64 import b64decode
 
 from fastapi import APIRouter, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
 
+from rrxiv.server.auth.templates import (
+    render_anonymous_hcaptcha,
+    render_orcid_paste,
+)
 from rrxiv.server.deps import get_settings, get_store
 from rrxiv.server.errors import (
     bad_request,
     forbidden,
+    not_found,
     unauthorized,
     validation_error,
 )
@@ -43,6 +48,7 @@ from rrxiv.server.store import (
 )
 from rrxiv.server.store.protocol import (
     AnonymousChallengeRecord,
+    PasteCodeEntry,
 )
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -113,18 +119,7 @@ def orcid_callback(
     settings: ServerSettings = request.app.state.settings
     store: Store = request.app.state.store
 
-    if settings.dev_mode and body.code.startswith("dev-"):
-        orcid_id = settings.orcid_dev_id
-    else:
-        # In a real deployment we would exchange the code with ORCID
-        # via httpx here. v0.1 reference server scope: dev mode only.
-        # Production deployments swap this module for one that talks
-        # to orcid.org. We surface a clear error otherwise.
-        raise bad_request(
-            "real ORCID code exchange not implemented in v0.1 reference "
-            "server; run with --dev-mode for local development, or replace "
-            "this handler in your deployment"
-        )
+    orcid_id = _resolve_orcid_id_from_code(settings, body.code)
 
     token = _issue_token(
         store=store,
@@ -136,6 +131,108 @@ def orcid_callback(
         orcid_id=orcid_id,
         expires_in_seconds=settings.token_ttl_seconds_orcid,
     )
+
+
+@router.get("/orcid/render", response_class=HTMLResponse)
+def orcid_render(
+    request: Request,
+    code: str = Query(..., description="ORCID-issued OAuth code."),
+    state: str = Query(""),
+) -> HTMLResponse:
+    """Paste-back page (RRP-0006).
+
+    Server-side render of the paste code that the user copies into a
+    CLI on a different host. Resolves the ORCID iD from ``code`` (in
+    dev mode this is the dev iD; in prod it round-trips through the
+    real ORCID OAuth dance), mints a single-use paste code, persists
+    it, and renders.
+
+    The ORCID OAuth ``redirect_uri`` for the paste-back flow points
+    at this endpoint.
+    """
+    settings: ServerSettings = request.app.state.settings
+    store: Store = request.app.state.store
+
+    orcid_id = _resolve_orcid_id_from_code(settings, code)
+
+    paste_code = _mint_paste_code()
+    now = int(time.time())
+    store.add_paste_code(
+        PasteCodeEntry(
+            code=paste_code,
+            orcid_id=orcid_id,
+            issued_at_unix=now,
+            expires_at_unix=now + 300,
+        )
+    )
+
+    body = render_orcid_paste(
+        code=paste_code, orcid_id=orcid_id, expires_in_minutes=5
+    )
+    return HTMLResponse(content=body)
+
+
+def _mint_paste_code() -> str:
+    """Build a human-friendly paste code: ``RRXIV-<4hex>-<4hex>``."""
+    raw = secrets.token_hex(4).upper()
+    return f"RRXIV-{raw[:4]}-{raw[4:]}"
+
+
+def _resolve_orcid_id_from_code(
+    settings: ServerSettings, code: str
+) -> str:
+    """Either accept a dev code or call orcid.org's token endpoint.
+
+    Configuration:
+
+    - ``RRXIV_ORCID_CLIENT_ID`` and ``RRXIV_ORCID_CLIENT_SECRET`` must
+      be set for real-mode exchange.
+    - The ``ORCID_REDIRECT_URI`` must match the URI registered with
+      ORCID for your client_id; we read it from a setting too.
+
+    Raises :class:`ProblemError` on any failure.
+    """
+    if settings.dev_mode and code.startswith("dev-"):
+        return settings.orcid_dev_id
+
+    if not (settings.orcid_client_id and settings.orcid_client_secret):
+        raise bad_request(
+            "real ORCID code exchange requires both "
+            "RRXIV_ORCID_CLIENT_ID and RRXIV_ORCID_CLIENT_SECRET; "
+            "or run with --dev-mode for local development"
+        )
+
+    import httpx
+
+    try:
+        resp = httpx.post(
+            settings.orcid_token_url,
+            data={
+                "client_id": settings.orcid_client_id,
+                "client_secret": settings.orcid_client_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": settings.orcid_redirect_uri or "",
+            },
+            headers={"Accept": "application/json"},
+            timeout=15.0,
+        )
+    except httpx.HTTPError as e:
+        raise unauthorized(f"ORCID token endpoint unreachable: {e}") from e
+
+    if resp.status_code >= 400:
+        raise unauthorized(
+            f"ORCID token endpoint returned {resp.status_code}: "
+            f"{resp.text[:200]}"
+        )
+
+    body = resp.json()
+    orcid = body.get("orcid")
+    if not orcid:
+        raise unauthorized(
+            "ORCID token response missing 'orcid' field"
+        )
+    return str(orcid)
 
 
 class OrcidPasteBody(BaseModel):
@@ -321,13 +418,7 @@ def anonymous_verify(
         raise unauthorized("challenge unknown, consumed, or expired")
     store.consume_challenge(body.challenge_id)
 
-    # Real hCaptcha siteverify call would happen here in production.
-    # In dev_mode we accept any non-empty response.
-    if not settings.dev_mode and settings.hcaptcha_secret is None:
-        raise bad_request(
-            "production hCaptcha integration requires RRXIV_HCAPTCHA_SECRET; "
-            "or run with --dev-mode"
-        )
+    _verify_with_hcaptcha(settings, body.response)
 
     token = _issue_token(
         store=store,
@@ -338,6 +429,65 @@ def anonymous_verify(
         token=token.token,
         expires_in_seconds=settings.token_ttl_seconds_anonymous,
     )
+
+
+@router.get("/anonymous/render", response_class=HTMLResponse)
+def anonymous_render(
+    request: Request,
+    challenge_id: str = Query(...),
+    site_key: str = Query(...),
+) -> HTMLResponse:
+    """Hosts the hCaptcha widget for the anonymous flow (RRP-0006).
+
+    The user solves the puzzle in this page; the resulting response
+    token is shown for paste-back into the CLI.
+    """
+    # Light validation: only known-good challenge IDs render.
+    store: Store = request.app.state.store
+    challenge = store.get_challenge(challenge_id)
+    if challenge is None or challenge.consumed:
+        raise not_found("challenge unknown or already consumed")
+    body = render_anonymous_hcaptcha(
+        site_key=site_key, challenge_id=challenge_id
+    )
+    return HTMLResponse(content=body)
+
+
+def _verify_with_hcaptcha(settings: ServerSettings, response: str) -> None:
+    """Validate ``response`` against hCaptcha's siteverify endpoint.
+
+    In dev mode any non-empty response is accepted. In prod mode the
+    server posts to ``https://api.hcaptcha.com/siteverify`` with the
+    secret + response token; non-200 or ``success=false`` raises 401.
+    """
+    if settings.dev_mode:
+        # Already enforced "non-empty" upstream.
+        return
+
+    if not settings.hcaptcha_secret:
+        raise bad_request(
+            "production hCaptcha integration requires RRXIV_HCAPTCHA_SECRET; "
+            "or run with --dev-mode"
+        )
+
+    import httpx
+
+    try:
+        resp = httpx.post(
+            "https://api.hcaptcha.com/siteverify",
+            data={"secret": settings.hcaptcha_secret, "response": response},
+            timeout=10.0,
+        )
+    except httpx.HTTPError as e:
+        raise unauthorized(f"hCaptcha verify endpoint unreachable: {e}") from e
+
+    if resp.status_code >= 400:
+        raise unauthorized(f"hCaptcha verify HTTP {resp.status_code}")
+
+    body = resp.json()
+    if not body.get("success"):
+        codes = ",".join(body.get("error-codes") or [])
+        raise unauthorized(f"hCaptcha rejected response: {codes or 'unknown'}")
 
 
 # ----------------------------- Helpers -----------------------------
