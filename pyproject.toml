@@ -57,6 +57,11 @@ extend-exclude = ["src/rrxiv/models/_generated"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's idiomatic Depends/Header use function calls in argument
+# defaults; ruff's B008 generally applies but is the wrong call here.
+"src/rrxiv/server/**/*.py" = ["B008"]
+
 [tool.mypy]
 strict = true
 python_version = "3.11"
