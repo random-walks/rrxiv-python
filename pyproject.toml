@@ -18,6 +18,16 @@ dependencies = [
 [project.optional-dependencies]
 agent = [
     "cryptography>=42.0",
+    "http-message-signatures>=2.0,<3",
+]
+cli = [
+    "keyring>=25",
+]
+server = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.30",
+    "cryptography>=42.0",
+    "http-message-signatures>=2.0,<3",
 ]
 dev = [
     "pytest>=8.0",
@@ -26,6 +36,10 @@ dev = [
     "mypy>=1.10",
     "datamodel-code-generator>=0.25",
     "cryptography>=42.0",
+    "http-message-signatures>=2.0,<3",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.30",
+    "keyring>=25",
 ]
 
 [project.scripts]
@@ -61,6 +75,11 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = ["pylatexenc.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["http_message_signatures.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

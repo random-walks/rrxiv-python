@@ -37,6 +37,7 @@ from rrxiv.client.retry import (
     is_retryable_status,
     parse_retry_after,
 )
+from rrxiv.client.signatures import AgentSigningAuth, AgentSigningKey
 from rrxiv.models import (
     CIR,
     Annotation,
@@ -67,6 +68,7 @@ class AsyncRrxivClient:
         base_url: str,
         *,
         auth: BearerToken | None = None,
+        agent_signing_key: AgentSigningKey | None = None,
         timeout: httpx.Timeout | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         user_agent: str = "rrxiv-python/0.1 (async)",
@@ -74,12 +76,16 @@ class AsyncRrxivClient:
     ):
         self.base_url = base_url.rstrip("/")
         self.auth = auth
+        self.agent_signing_key = agent_signing_key
         self.retry_policy = retry_policy if retry_policy is not None else DEFAULT_RETRY_POLICY
         headers = {
             "User-Agent": user_agent,
             "Accept": "application/json",
         }
         headers.update(header(auth))
+        self._signing_auth: AgentSigningAuth | None = (
+            AgentSigningAuth(agent_signing_key) if agent_signing_key else None
+        )
         self._http = httpx.AsyncClient(
             base_url=self.base_url,
             headers=headers,
@@ -288,6 +294,7 @@ class AsyncRrxivClient:
         extra_headers: dict[str, str] | None = None,
     ) -> Any:
         budget = RetryBudget(self.retry_policy)
+        sign = self._signing_auth if method.upper() not in ("GET", "HEAD") else None
         while True:
             response = await self._http.request(
                 method,
@@ -295,6 +302,7 @@ class AsyncRrxivClient:
                 params=params,
                 json=json,
                 headers=extra_headers,
+                auth=sign,
             )
             if response.is_success:
                 if response.headers.get("content-type", "").startswith(

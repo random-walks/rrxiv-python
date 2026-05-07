@@ -46,6 +46,7 @@ from rrxiv.client.retry import (
     parse_retry_after,
     sleep_for,
 )
+from rrxiv.client.signatures import AgentSigningAuth, AgentSigningKey
 from rrxiv.models import (
     CIR,
     Annotation,
@@ -68,19 +69,33 @@ class RrxivClient:
         base_url: str,
         *,
         auth: BearerToken | None = None,
+        agent_signing_key: AgentSigningKey | None = None,
         timeout: httpx.Timeout | None = None,
         transport: httpx.BaseTransport | None = None,
         user_agent: str = "rrxiv-python/0.1",
         retry_policy: RetryPolicy | None = None,
     ):
+        """Construct a client.
+
+        Args:
+            agent_signing_key: optional Ed25519 signing key for agent
+                writes per RRP-0007. When set, write requests
+                (POST/PUT/PATCH/DELETE) are signed with this key in
+                addition to carrying the bearer token. Read requests
+                are unaffected.
+        """
         self.base_url = base_url.rstrip("/")
         self.auth = auth
+        self.agent_signing_key = agent_signing_key
         self.retry_policy = retry_policy if retry_policy is not None else DEFAULT_RETRY_POLICY
         headers = {
             "User-Agent": user_agent,
             "Accept": "application/json",
         }
         headers.update(header(auth))
+        self._signing_auth: AgentSigningAuth | None = (
+            AgentSigningAuth(agent_signing_key) if agent_signing_key else None
+        )
         self._http = httpx.Client(
             base_url=self.base_url,
             headers=headers,
@@ -274,6 +289,8 @@ class RrxivClient:
         extra_headers: dict[str, str] | None = None,
     ) -> Any:
         budget = RetryBudget(self.retry_policy)
+        # Per RRP-0007: agent signing applies to writes, not reads.
+        sign = self._signing_auth if method.upper() not in ("GET", "HEAD") else None
         while True:
             response = self._http.request(
                 method,
@@ -281,6 +298,7 @@ class RrxivClient:
                 params=params,
                 json=json,
                 headers=extra_headers,
+                auth=sign,
             )
             if response.is_success:
                 if response.headers.get("content-type", "").startswith(
