@@ -9,6 +9,9 @@ from fastapi import APIRouter, FastAPI
 from rrxiv import __version__ as rrxiv_version
 from rrxiv.server.annotations.router import router as annotations_router
 from rrxiv.server.auth.router import router as auth_router
+from rrxiv.server.auth.signature_middleware import (
+    SignatureVerificationMiddleware,
+)
 from rrxiv.server.claims.router import router as claims_router
 from rrxiv.server.errors import install_exception_handlers
 from rrxiv.server.papers.router import router as papers_router
@@ -62,6 +65,11 @@ def build_app(
     app.state.store = store
 
     install_exception_handlers(app)
+
+    # RRP-0007: signature middleware runs before FastAPI body parsing
+    # so multipart routes (POST /submissions) can verify the signature
+    # and still let FastAPI re-parse the body.
+    app.add_middleware(SignatureVerificationMiddleware)
 
     # Mount versioned API.
     api = APIRouter()

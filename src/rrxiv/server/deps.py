@@ -11,13 +11,8 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import httpx
 from fastapi import Header, Request
 
-from rrxiv.client.signatures import (
-    SignatureVerificationError,
-    verify_request_signature,
-)
 from rrxiv.server.errors import (
     forbidden,
     rate_limited,
@@ -80,56 +75,13 @@ async def _ensure_signature_verified_for_writes(
     store: Store,
     identity: Identity,
 ) -> None:
-    """RRP-0007: agent writes require both bearer and a valid
-    Signature. Reads pass through. Non-agent identities are
-    unaffected."""
-    if request.method.upper() in ("GET", "HEAD"):
-        return
-    if not isinstance(identity, AgentIdentity):
-        return
-
-    body = await request.body()
-    httpx_view = httpx.Request(
-        method=request.method,
-        url=str(request.url),
-        headers=list(request.headers.items()),
-        content=body,
-    )
-
-    def lookup(handle: str) -> object | None:
-        rec = store.get_agent(handle)
-        if rec is None:
-            return None
-        # Resolve to a usable Ed25519PublicKey object.
-        from base64 import b64decode
-
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-            Ed25519PublicKey,
-        )
-
-        try:
-            return Ed25519PublicKey.from_public_bytes(
-                b64decode(rec.public_key_b64)
-            )
-        except Exception:
-            return None
-
-    try:
-        verified = verify_request_signature(
-            request=httpx_view,
-            body=body,
-            public_key_lookup=lookup,
-            clock_skew_seconds=settings.signature_clock_skew_seconds,
-        )
-    except SignatureVerificationError as e:
-        raise unauthorized(f"signature: {e.reason}") from e
-
-    if verified.keyid != identity.handle:
-        # The signature was made under a different agent than the bearer.
-        raise forbidden(
-            f"signature keyid {verified.keyid!r} does not match "
-            f"bearer identity {identity.handle!r}"
-        )
+    """RRP-0007 enforcement is in
+    :class:`rrxiv.server.auth.signature_middleware.SignatureVerificationMiddleware`,
+    which runs before FastAPI's body parser so multipart endpoints
+    (e.g. POST /submissions) work. This function is a no-op kept for
+    historical symmetry; the dependency layer just resolves bearer →
+    identity, and the middleware handles the signature path."""
+    return None
 
 
 def require_identity(*, allow_anonymous: bool = True) -> Callable:  # type: ignore[type-arg]

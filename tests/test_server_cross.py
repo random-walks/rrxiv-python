@@ -242,6 +242,7 @@ def test_agent_write_without_signature_fails_401() -> None:
 def test_orcid_write_does_not_require_signature() -> None:
     """ORCID identities use bearer-only for writes."""
     app, transport = _build_app_and_transport()
+    app.state.store.add_paper(_paper("p1"))
 
     # Mint an ORCID token via the dev flow.
     with httpx.Client(transport=transport, base_url="http://test/api/v0") as c:
@@ -339,6 +340,7 @@ def test_idempotent_replay_returns_same_response() -> None:
     """POST /annotations with same Idempotency-Key + same body returns
     the cached response."""
     app, transport = _build_app_and_transport()
+    app.state.store.add_paper(_paper("p1"))
 
     # ORCID identity (bearer-only) for simplicity.
     with httpx.Client(transport=transport, base_url="http://test/api/v0") as c:
