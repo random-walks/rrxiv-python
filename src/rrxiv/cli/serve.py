@@ -28,6 +28,16 @@ def serve(
     reload: Annotated[
         bool, typer.Option("--reload/--no-reload", help="Auto-reload on file changes.")
     ] = False,
+    store: Annotated[
+        str,
+        typer.Option(
+            "--store",
+            help=(
+                "Storage backend URL (RRP-0011). "
+                "memory:// (default) or sqlite:///path/to/db.sqlite."
+            ),
+        ),
+    ] = "memory://",
 ) -> None:
     """Start the FastAPI reference server."""
     try:
@@ -47,6 +57,7 @@ def serve(
     settings = ServerSettings(
         api_base=f"http://{host}:{port}/api/v0",
         dev_mode=dev_mode,
+        store_url=store,
     )
     app = build_app(settings=settings)
 

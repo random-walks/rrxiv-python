@@ -135,6 +135,43 @@ def sign_enrollment_payload(
     return base64.standard_b64encode(sig).decode("ascii")
 
 
+def build_rotation_payload(
+    *,
+    handle: str,
+    new_public_key_b64: str,
+    issued_at: int | None = None,
+) -> bytes:
+    """Build the canonical rotation payload (RRP-0010).
+
+    Same shape as :func:`build_enrollment_payload` but with
+    ``new_public_key_b64`` instead of ``public_key_b64``.
+    """
+    if not handle.startswith("@"):
+        raise ValueError(f"handle must start with @, got {handle!r}")
+    payload = {
+        "handle": handle,
+        "issued_at": issued_at if issued_at is not None else int(time.time()),
+        "new_public_key_b64": new_public_key_b64,
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+@dataclass(frozen=True, slots=True)
+class AgentKeyRotationRequest:
+    """Body of ``POST /auth/agent/{handle}/rotate-key`` (RRP-0010)."""
+
+    new_public_key_b64: str
+    rotation_payload_b64: str
+    new_signature_b64: str
+
+
+@dataclass(frozen=True, slots=True)
+class AgentKeyRotationResponse:
+    handle: str
+    public_key_b64: str
+    rotated_at_unix: int
+
+
 def enroll_agent(
     *,
     api_base: str,
@@ -176,4 +213,86 @@ def enroll_agent(
         token=data["token"],
         identity_type="agent",
         identity=data["handle"],
+    )
+
+
+def rotate_agent_key(
+    *,
+    api_base: str,
+    handle: str,
+    bearer: BearerToken,
+    old_signing_key: Any,  # AgentSigningKey; avoid circular import
+    new_private_key_bytes: bytes,
+    transport: httpx.BaseTransport | None = None,
+    timeout: float = 30.0,
+) -> AgentKeyRotationResponse:
+    """Rotate an agent's Ed25519 keypair (RRP-0010).
+
+    The request itself is signed with the *old* private key (transport
+    signature, RFC 9421). The body carries an *inline* signature from
+    the new private key, proving possession of both keys.
+
+    On success, the server has replaced the registered public key.
+    Subsequent writes must use the new private key.
+
+    Args:
+        old_signing_key: an :class:`rrxiv.client.AgentSigningKey`
+            wrapping the current Ed25519 keypair, used to sign the
+            HTTP request transport.
+        new_private_key_bytes: 32-byte raw Ed25519 private key for
+            the new keypair.
+
+    Returns:
+        :class:`AgentKeyRotationResponse` echoing the server's view
+        of the rotation (handle, new public key, timestamp).
+
+    Raises:
+        rrxiv.client.errors.UnauthorizedError: any signature failed
+            verification.
+        rrxiv.client.errors.ForbiddenError: handle in path doesn't
+            match bearer identity.
+    """
+    from base64 import standard_b64encode
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+        Ed25519PrivateKey,
+    )
+
+    new_priv = Ed25519PrivateKey.from_private_bytes(new_private_key_bytes)
+    new_pub_bytes = new_priv.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    new_pub_b64 = standard_b64encode(new_pub_bytes).decode("ascii")
+
+    payload = build_rotation_payload(
+        handle=handle, new_public_key_b64=new_pub_b64
+    )
+    payload_b64 = standard_b64encode(payload).decode("ascii")
+    new_sig_bytes = new_priv.sign(payload_b64.encode("ascii"))
+    new_sig_b64 = standard_b64encode(new_sig_bytes).decode("ascii")
+
+    body = {
+        "new_public_key_b64": new_pub_b64,
+        "rotation_payload_b64": payload_b64,
+        "new_signature_b64": new_sig_b64,
+    }
+
+    base = api_base.rstrip("/")
+    from rrxiv.client.signatures import AgentSigningAuth
+
+    with httpx.Client(transport=transport, timeout=timeout) as client:
+        resp = client.post(
+            f"{base}/auth/agent/{handle}/rotate-key",
+            json=body,
+            headers={"Authorization": f"Bearer {bearer.token}"},
+            auth=AgentSigningAuth(old_signing_key),
+        )
+    raise_for_status(resp)
+    data = resp.json()
+    return AgentKeyRotationResponse(
+        handle=data["handle"],
+        public_key_b64=data["public_key_b64"],
+        rotated_at_unix=int(data["rotated_at_unix"]),
     )

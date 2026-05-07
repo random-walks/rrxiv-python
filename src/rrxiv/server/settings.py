@@ -19,6 +19,12 @@ class ServerSettings:
     """The public-facing base URL the server is reachable at. Used
     in OAuth redirect_uri construction and OpenAPI docs links."""
 
+    store_url: str = "memory://"
+    """Storage backend selection (RRP-0011). ``memory://`` (default)
+    uses an in-memory store. ``sqlite:///path/to/db.sqlite`` uses
+    SQLite at the given path. Future schemes (e.g. ``postgres://``)
+    are RRP-future."""
+
     dev_mode: bool = True
     """When True, ORCID OAuth and hCaptcha are stubbed (any code/
     response is accepted, dev iDs returned). Real Ed25519 verification
@@ -100,6 +106,7 @@ class ServerSettings:
 
         return cls(
             api_base=get_str_required("API_BASE", cls.api_base),
+            store_url=get_str_required("STORE_URL", cls.store_url),
             dev_mode=get_bool("DEV_MODE", cls.dev_mode),
             orcid_client_id=get_str("ORCID_CLIENT_ID", cls.orcid_client_id),
             orcid_client_secret=get_str(

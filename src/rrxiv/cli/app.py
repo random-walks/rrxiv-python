@@ -71,11 +71,17 @@ def serve(
         bool, typer.Option("--dev-mode/--no-dev-mode")
     ] = True,
     reload: Annotated[bool, typer.Option("--reload/--no-reload")] = False,
+    store: Annotated[
+        str,
+        typer.Option(
+            "--store", help="Backend URL: memory:// or sqlite:///path."
+        ),
+    ] = "memory://",
 ) -> None:
     """Start the rrxiv reference FastAPI server."""
     from rrxiv.cli.serve import serve as _serve
 
-    _serve(host=host, port=port, dev_mode=dev_mode, reload=reload)
+    _serve(host=host, port=port, dev_mode=dev_mode, reload=reload, store=store)
 
 
 @app.command()

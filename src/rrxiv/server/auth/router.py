@@ -490,6 +490,170 @@ def _verify_with_hcaptcha(settings: ServerSettings, response: str) -> None:
         raise unauthorized(f"hCaptcha rejected response: {codes or 'unknown'}")
 
 
+# ----------------------------- Key rotation (RRP-0010) -----------------------------
+
+
+class AgentRotateKeyBody(BaseModel):
+    new_public_key_b64: str
+    rotation_payload_b64: str
+    new_signature_b64: str
+
+
+class AgentRotateKeyResponse(BaseModel):
+    handle: str
+    public_key_b64: str
+    rotated_at_unix: int
+
+
+@router.post(
+    "/agent/{handle}/rotate-key",
+    response_model=AgentRotateKeyResponse,
+    status_code=201,
+)
+def agent_rotate_key(
+    handle: str,
+    body: AgentRotateKeyBody,
+    request: Request,
+) -> AgentRotateKeyResponse:
+    """Rotate an enrolled agent's keypair (RRP-0010).
+
+    Two signatures are required:
+
+    1. Transport signature (RFC 9421) verifying with the *old* public
+       key — handled by SignatureVerificationMiddleware before this
+       route runs.
+    2. Inline ``new_signature_b64`` over ``rotation_payload_b64``,
+       verifying with the *new* public key.
+
+    The bearer must resolve to ``handle``. On success, the server
+    atomically replaces the registered public key.
+    """
+    settings: ServerSettings = request.app.state.settings
+    store: Store = request.app.state.store
+
+    # Bearer-to-identity resolution. The signature middleware has
+    # already verified the transport signature for agent identities.
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.lower().startswith("bearer "):
+        raise unauthorized("missing bearer token")
+    token = auth_header.split(" ", 1)[1].strip()
+    record = store.get_token(token)
+    if record is None:
+        raise unauthorized("token not recognised")
+    if not isinstance(record.identity, AgentIdentity):
+        raise forbidden("only agent identities can rotate keys")
+    if record.identity.handle != handle:
+        raise forbidden(
+            f"bearer identity {record.identity.handle!r} does not match "
+            f"path handle {handle!r}"
+        )
+
+    # Verify the inline new-key signature.
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+        Ed25519PublicKey,
+    )
+
+    try:
+        new_pub = Ed25519PublicKey.from_public_bytes(
+            b64decode(body.new_public_key_b64)
+        )
+        new_pub.verify(
+            b64decode(body.new_signature_b64),
+            body.rotation_payload_b64.encode("ascii"),
+        )
+    except Exception as e:
+        raise unauthorized(f"new-key signature invalid: {e}") from e
+
+    # Validate the canonical rotation payload.
+    import json as _json
+
+    try:
+        payload = _json.loads(b64decode(body.rotation_payload_b64).decode("utf-8"))
+    except Exception as e:
+        raise validation_error(
+            f"rotation_payload not valid base64-encoded JSON: {e}"
+        ) from e
+    if payload.get("handle") != handle:
+        raise validation_error("rotation_payload.handle does not match path")
+    if payload.get("new_public_key_b64") != body.new_public_key_b64:
+        raise validation_error(
+            "rotation_payload.new_public_key_b64 does not match request"
+        )
+    issued_at = payload.get("issued_at")
+    if not isinstance(issued_at, int):
+        raise validation_error("rotation_payload.issued_at missing or not int")
+    if abs(int(time.time()) - issued_at) > settings.signature_clock_skew_seconds:
+        raise unauthorized("rotation_payload.issued_at out of window")
+
+    # Atomically replace the registered public key.
+    existing = store.get_agent(handle)
+    if existing is None:
+        raise unauthorized("agent not enrolled")  # shouldn't happen — bearer matched
+    store.add_agent(
+        AgentRecord(
+            handle=handle,
+            public_key_b64=body.new_public_key_b64,
+            contact=existing.contact,
+            enrolled_at_unix=existing.enrolled_at_unix,
+        )
+    )
+    return AgentRotateKeyResponse(
+        handle=handle,
+        public_key_b64=body.new_public_key_b64,
+        rotated_at_unix=int(time.time()),
+    )
+
+
+# ----------------------------- Refresh (RRP-0009) -----------------------------
+
+
+class RefreshResponse(BaseModel):
+    token: str
+    expires_in_seconds: int
+
+
+@router.post("/refresh", response_model=RefreshResponse)
+def refresh_token(
+    request: Request,
+    authorization: str = "",
+) -> RefreshResponse:
+    """Exchange a still-valid bearer for a fresh one (RRP-0009).
+
+    The Authorization header is the entire input. The server revokes
+    the old token atomically and returns a new opaque bearer with
+    a refreshed TTL matching the identity tier.
+
+    Anonymous tokens cannot be refreshed (anti-abuse; the user
+    re-solves a CAPTCHA).
+    """
+    settings: ServerSettings = request.app.state.settings
+    store: Store = request.app.state.store
+
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.lower().startswith("bearer "):
+        raise unauthorized("missing bearer token")
+    old_token = auth_header.split(" ", 1)[1].strip()
+    record = store.get_token(old_token)
+    if record is None:
+        raise unauthorized("token not recognised")
+    if record.expires_at_unix < int(time.time()):
+        raise unauthorized("token expired; re-login from scratch")
+
+    if isinstance(record.identity, AnonymousIdentity):
+        raise forbidden("anonymous tokens cannot be refreshed")
+
+    if isinstance(record.identity, OrcidIdentity):
+        ttl = settings.token_ttl_seconds_orcid
+    elif isinstance(record.identity, AgentIdentity):
+        ttl = settings.token_ttl_seconds_agent
+    else:
+        ttl = settings.token_ttl_seconds_anonymous
+
+    new = _issue_token(store=store, identity=record.identity, ttl=ttl)
+    store.revoke_token(old_token)
+    return RefreshResponse(token=new.token, expires_in_seconds=ttl)
+
+
 # ----------------------------- Helpers -----------------------------
 
 

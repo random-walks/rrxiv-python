@@ -18,7 +18,7 @@ from rrxiv.server.papers.router import router as papers_router
 from rrxiv.server.search.router import router as search_router
 from rrxiv.server.settings import ServerSettings
 from rrxiv.server.snapshots.router import router as snapshots_router
-from rrxiv.server.store import MemoryStore, Store
+from rrxiv.server.store import Store, store_from_url
 from rrxiv.server.submissions.router import (
     router as submissions_router,
 )
@@ -45,7 +45,7 @@ def build_app(
             :class:`MemoryStore`.
     """
     settings = settings or ServerSettings.from_env()
-    store = store or MemoryStore()
+    store = store or store_from_url(settings.store_url)
 
     app = FastAPI(
         title="rrxiv reference server",
