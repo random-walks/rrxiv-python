@@ -18,6 +18,17 @@ dependencies = [
 [project.optional-dependencies]
 agent = [
     "cryptography>=42.0",
+    "http-message-signatures>=2.0,<3",
+]
+cli = [
+    "keyring>=25",
+]
+server = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "cryptography>=42.0",
+    "http-message-signatures>=2.0,<3",
 ]
 dev = [
     "pytest>=8.0",
@@ -26,6 +37,11 @@ dev = [
     "mypy>=1.10",
     "datamodel-code-generator>=0.25",
     "cryptography>=42.0",
+    "http-message-signatures>=2.0,<3",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "keyring>=25",
 ]
 
 [project.scripts]
@@ -42,6 +58,11 @@ extend-exclude = ["src/rrxiv/models/_generated"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's idiomatic Depends/Header use function calls in argument
+# defaults; ruff's B008 generally applies but is the wrong call here.
+"src/rrxiv/server/**/*.py" = ["B008"]
 
 [tool.mypy]
 strict = true
@@ -61,6 +82,11 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = ["pylatexenc.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["http_message_signatures.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

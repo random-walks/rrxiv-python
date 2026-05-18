@@ -37,6 +37,7 @@ from rrxiv.auth.orcid import (
     build_orcid_authorization_url,
     exchange_orcid_code,
 )
+from rrxiv.auth.refresh import RefreshedBearer, refresh_bearer
 
 __all__ = [
     "AgentEnrollmentRequest",
@@ -45,9 +46,11 @@ __all__ = [
     "AnonymousChallengeResponse",
     "OrcidAuthorizationUrl",
     "OrcidTokenResponse",
+    "RefreshedBearer",
     "build_orcid_authorization_url",
     "enroll_agent",
     "exchange_orcid_code",
+    "refresh_bearer",
     "request_anonymous_challenge",
     "sign_enrollment_payload",
     "verify_anonymous_challenge",

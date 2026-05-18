@@ -30,10 +30,13 @@ from rrxiv.client.retry import (
     NO_RETRY_POLICY,
     RetryPolicy,
 )
+from rrxiv.client.signatures import AgentSigningAuth, AgentSigningKey
 
 __all__ = [
     "DEFAULT_RETRY_POLICY",
     "NO_RETRY_POLICY",
+    "AgentSigningAuth",
+    "AgentSigningKey",
     "AsyncRrxivClient",
     "BadRequestError",
     "BearerToken",

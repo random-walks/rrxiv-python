@@ -23,4 +23,14 @@ importable by downstream consumers' tests too.
 
 from rrxiv.testing.mock_server import MockRrxivServer
 
-__all__ = ["MockRrxivServer"]
+# `live_server` is the pytest fixture for downstream tests that
+# want a real uvicorn-backed reference server. Imported lazily so
+# clients without `[server]` extra installed don't choke at import.
+try:
+    from rrxiv.testing.live_server import LiveServer, live_server
+except ImportError:  # pragma: no cover
+    LiveServer = None  # type: ignore[assignment, misc]
+    live_server = None  # type: ignore[assignment]
+
+
+__all__ = ["LiveServer", "MockRrxivServer", "live_server"]

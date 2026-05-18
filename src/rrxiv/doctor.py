@@ -173,6 +173,91 @@ def _check_protocol_version_consistency() -> CheckResult:
     )
 
 
+def _check_optional_extra(
+    extra_name: str, modules: list[str], *, fail_text: str
+) -> CheckResult:
+    """Generic helper: report whether a [extra] is installed."""
+    import importlib.util
+
+    missing = [m for m in modules if importlib.util.find_spec(m) is None]
+    if not missing:
+        return CheckResult(
+            name=f"[{extra_name}] extra installed",
+            status="pass",
+        )
+    return CheckResult(
+        name=f"[{extra_name}] extra installed",
+        status="warn",
+        detail=fail_text + f" Missing: {', '.join(missing)}.",
+    )
+
+
+def _check_agent_extra() -> CheckResult:
+    return _check_optional_extra(
+        "agent",
+        ["cryptography", "http_message_signatures"],
+        fail_text=(
+            "agent identity flows (rrxiv login agent, "
+            "RFC 9421 signing) need `pip install 'rrxiv[agent]'`."
+        ),
+    )
+
+
+def _check_cli_extra() -> CheckResult:
+    return _check_optional_extra(
+        "cli",
+        ["keyring"],
+        fail_text=(
+            "rrxiv login uses `keyring` for OS-native secure token "
+            "storage. Without it, credentials fall back to a 0600 "
+            "file at ~/.config/rrxiv/credentials.json. "
+            "`pip install 'rrxiv[cli]'` for the keyring backend."
+        ),
+    )
+
+
+def _check_server_extra() -> CheckResult:
+    return _check_optional_extra(
+        "server",
+        ["fastapi", "uvicorn"],
+        fail_text=(
+            "the reference server (rrxiv serve) needs "
+            "`pip install 'rrxiv[server]'`."
+        ),
+    )
+
+
+def _check_keyring_backend() -> CheckResult:
+    """If keyring is installed, is the backend usable?"""
+    try:
+        import keyring
+        from keyring.backends.fail import Keyring as FailKeyring
+        from keyring.backends.null import Keyring as NullKeyring
+    except ImportError:
+        return CheckResult(
+            name="keyring backend usable",
+            status="warn",
+            detail="keyring not installed; the file fallback will be used.",
+        )
+    backend = keyring.get_keyring()
+    name = type(backend).__name__
+    if isinstance(backend, FailKeyring | NullKeyring):
+        return CheckResult(
+            name="keyring backend usable",
+            status="warn",
+            detail=(
+                f"keyring is installed but no usable backend is configured "
+                f"(found {name}). Credentials will fall back to "
+                f"~/.config/rrxiv/credentials.json."
+            ),
+        )
+    return CheckResult(
+        name="keyring backend usable",
+        status="pass",
+        detail=f"using {name}",
+    )
+
+
 _CHECKS = (
     _check_python_package,
     _check_latex_engine,
@@ -180,6 +265,10 @@ _CHECKS = (
     _check_schema_parseable,
     _check_models_importable,
     _check_protocol_version_consistency,
+    _check_agent_extra,
+    _check_cli_extra,
+    _check_server_extra,
+    _check_keyring_backend,
 )
 
 

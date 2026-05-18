@@ -41,6 +41,67 @@ annotation_app = typer.Typer(
 )
 app.add_typer(annotation_app, name="annotation")
 
+# Login subcommands (RRP-0006).
+from rrxiv.cli.login import login_app  # noqa: E402
+
+app.add_typer(login_app, name="login")
+
+
+# Logout (alias for `login logout`).
+@app.command()
+def logout(
+    server: Annotated[str | None, typer.Option("--server")] = None,
+    identity_type: Annotated[
+        str | None, typer.Option("--identity")
+    ] = None,
+    all_servers: Annotated[bool, typer.Option("--all")] = False,
+) -> None:
+    """Forget stored credentials. Alias for ``rrxiv login logout``."""
+    from rrxiv.cli.login import logout as _logout
+
+    _logout(server=server, identity_type=identity_type, all_servers=all_servers)
+
+
+# Serve (RRP-0008).
+@app.command()
+def conformance(
+    server: Annotated[
+        str,
+        typer.Argument(help="API base URL, e.g. http://127.0.0.1:8000/api/v0"),
+    ],
+    keep_state: Annotated[
+        bool, typer.Option("--keep-state/--clean")
+    ] = False,
+) -> None:
+    """Run the canonical conformance suite against any rrxiv server.
+
+    Useful for validating other-language client+server pairs.
+    """
+    from rrxiv.cli.conformance import conformance as _conformance
+
+    _conformance(server=server, keep_state=keep_state)
+
+
+@app.command()
+def serve(
+    host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port")] = 8000,
+    dev_mode: Annotated[
+        bool, typer.Option("--dev-mode/--no-dev-mode")
+    ] = True,
+    reload: Annotated[bool, typer.Option("--reload/--no-reload")] = False,
+    store: Annotated[
+        str,
+        typer.Option(
+            "--store", help="Backend URL: memory:// or sqlite:///path."
+        ),
+    ] = "memory://",
+) -> None:
+    """Start the rrxiv reference FastAPI server."""
+    from rrxiv.cli.serve import serve as _serve
+
+    _serve(host=host, port=port, dev_mode=dev_mode, reload=reload, store=store)
+
 
 @app.command()
 def parse(
