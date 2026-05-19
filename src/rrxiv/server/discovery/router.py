@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 
 from rrxiv.server.deps import get_store
+from rrxiv.server.papers.projection import compute_stats
 from rrxiv.server.papers.scopes import SCOPES
 from rrxiv.server.store import Store
 
@@ -26,19 +28,31 @@ def list_scopes(request: Request) -> dict[str, Any]:
 
 
 @router.get("/topics")
-def list_topics(request: Request) -> dict[str, Any]:
+def list_topics(
+    request: Request,
+    with_counts: bool = Query(False, alias="with_counts"),
+) -> dict[str, Any]:
     """Sorted unique list of topics present in the corpus.
 
     Derived from ``paper.topics[]`` across all papers. Useful for
     populating UI facets.
+
+    When ``with_counts=1`` is passed, items become ``{topic, count}``
+    objects sorted by count descending, then alphabetically.
     """
     store: Store = get_store(request)
-    topics: set[str] = set()
+    counter: Counter[str] = Counter()
     for paper in store.list_papers():
         for topic in paper.get("topics") or []:
             if isinstance(topic, str) and topic:
-                topics.add(topic)
-    items = sorted(topics)
+                counter[topic] += 1
+    if with_counts:
+        items: list[Any] = [
+            {"topic": t, "count": c}
+            for t, c in sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))
+        ]
+    else:
+        items = sorted(counter.keys())
     return {"items": items, "next_cursor": None}
 
 
@@ -74,20 +88,15 @@ def corpus_stats(request: Request) -> dict[str, Any]:
         for author in (p.get("authors") or [])
         if isinstance(author, dict) and author.get("is_agent")
     )
-    # An "active study" for v0.1 = a paper whose stats.status would be
-    # `untested` with >4 claims, i.e. matches the "active" scope.
-    # We don't recompute stats per-paper here; this is intentionally a
-    # cheap heuristic that approximates the home-page corpus card.
-    active_studies = sum(
-        1
-        for p in papers
-        if any(
-            c.get("paper_id") == p["id"]
-            and c.get("replication_status") in (None, "untested")
-            for c in claims
-        )
-        and sum(1 for c in claims if c.get("paper_id") == p["id"]) > 4
-    )
+
+    by_status: Counter[str] = Counter()
+    active_studies = 0
+    for paper in papers:
+        stats = compute_stats(paper["id"], store)
+        by_status[stats["status"]] += 1
+        paper_claims = [c for c in claims if c.get("paper_id") == paper["id"]]
+        if stats["status"] == "untested" and len(paper_claims) > 4:
+            active_studies += 1
 
     return {
         "papers": len(papers),
@@ -98,6 +107,13 @@ def corpus_stats(request: Request) -> dict[str, Any]:
         "retractions": retractions,
         "active_studies": active_studies,
         "agent_authored_papers": agent_authored_paper_count,
+        "by_status": {
+            "preprint": by_status.get("preprint", 0),
+            "untested": by_status.get("untested", 0),
+            "replicated": by_status.get("replicated", 0),
+            "contested": by_status.get("contested", 0),
+            "retracted": by_status.get("retracted", 0),
+        },
         "computed_at": (
             datetime.now(timezone.utc)
             .isoformat(timespec="seconds")

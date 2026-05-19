@@ -306,6 +306,47 @@ def test_discovery_topics_endpoint() -> None:
     assert resp.json()["items"] == ["biology", "infrastructure", "physics"]
 
 
+def test_discovery_topics_with_counts() -> None:
+    app, transport = _build_app_and_transport()
+    p1 = _paper("p1")
+    p1["topics"] = ["physics", "infrastructure"]
+    p2 = _paper("p2")
+    p2["topics"] = ["physics", "biology"]
+    p3 = _paper("p3")
+    p3["topics"] = ["physics"]
+    app.state.store.add_paper(p1)
+    app.state.store.add_paper(p2)
+    app.state.store.add_paper(p3)
+    with httpx.Client(transport=transport, base_url="http://test/api/v0") as c:
+        resp = c.get("/topics", params={"with_counts": 1})
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    # Sorted by count desc, then alpha.
+    assert items[0] == {"topic": "physics", "count": 3}
+    assert {"topic": "biology", "count": 1} in items
+    assert {"topic": "infrastructure", "count": 1} in items
+
+
+def test_discovery_stats_by_status() -> None:
+    app, transport = _build_app_and_transport()
+    p1 = _paper("p1")  # preprint — no claims
+    p2 = _paper("p2")  # untested — claims, no annotations
+    p3 = _paper("p3")  # replicated — claim replicated
+    app.state.store.add_paper(p1)
+    app.state.store.add_paper(p2)
+    app.state.store.add_paper(p3)
+    app.state.store.add_claim(_claim("p2:c1", "p2", "untested"))
+    app.state.store.add_claim(_claim("p3:c1", "p3", "replicated"))
+    with httpx.Client(transport=transport, base_url="http://test/api/v0") as c:
+        resp = c.get("/stats")
+    assert resp.status_code == 200
+    by_status = resp.json()["by_status"]
+    assert by_status["preprint"] == 2  # p1 (no claims) + p2 (untested with 1 claim, no annotations -> preprint)
+    assert by_status["replicated"] == 1
+    assert by_status["contested"] == 0
+    assert by_status["retracted"] == 0
+
+
 def test_claims_top_endpoint() -> None:
     app, transport = _build_app_and_transport()
     app.state.store.add_paper(_paper("p1"))

@@ -5,19 +5,38 @@
   "version": "v1",
   "title": "Many small claims, all under active replication",
   "authors": [
-    { "name": "S. Iwasaki", "orcid": "0000-0002-1112-2003" }
+    {
+      "name": "S. Iwasaki",
+      "orcid": "0000-0002-1112-2003"
+    }
   ],
   "abstract": "A survey paper registering many small empirical claims about preprint discoverability. Each claim is currently the subject of an in-progress replication effort by an independent group.",
   "submitted_at": "2026-05-17T18:00:00Z",
   "license": "CC-BY-4.0",
-  "topics": ["cs.DL", "cs.IR"],
+  "topics": [
+    "cs.DL",
+    "cs.IR"
+  ],
   "source": {
     "format": "latex",
     "uri": "https://api.rrxiv.org/api/v0/papers/01923f8e-0008-7c4d-9e1f-3a2b1c0d4e5f/source"
   },
   "sections": [],
   "figures": [],
-  "citations": [],
+  "citations": [
+    {
+      "id": "cite-active-arxiv-1",
+      "kind": "arxiv",
+      "ref": "2105.10001",
+      "title": "Discoverability metrics for preprints"
+    },
+    {
+      "id": "cite-active-arxiv-2",
+      "kind": "arxiv",
+      "ref": "2210.13211",
+      "title": "Cross-domain attention in scholarly networks"
+    }
+  ],
   "annotations": [
     {
       "id": "ann-01923f8e-0008-discoverable",
@@ -26,7 +45,22 @@
       "annotation_type": "comment",
       "content": "Replication group W is working on claims c1-c3.",
       "created_at": "2026-05-18T09:00:00Z",
-      "created_by": { "identity_type": "orcid", "identity": "0000-0001-0000-0001" }
+      "created_by": {
+        "identity_type": "orcid",
+        "identity": "0000-0001-0000-0001"
+      }
+    },
+    {
+      "id": "ann-active-comment-1",
+      "target_id": "01923f8e-0008-7c4d-9e1f-3a2b1c0d4e5f:c1",
+      "target_type": "claim",
+      "annotation_type": "comment",
+      "content": "We have a replication pre-registered with our group; expected results by end of month.",
+      "created_at": "2026-05-18T16:30:00Z",
+      "created_by": {
+        "identity_type": "orcid",
+        "identity": "0000-0001-0000-0001"
+      }
     }
   ],
   "claims": [

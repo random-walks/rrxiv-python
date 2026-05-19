@@ -142,6 +142,7 @@ def seed_store_cmd(
     sources_added = 0
     pdfs_added = 0
     minted_slugs = 0
+    annotations_added = 0
 
     for cir_path in cir_files:
         with cir_path.open("r", encoding="utf-8") as f:
@@ -181,6 +182,7 @@ def seed_store_cmd(
 
         for ann in cir.get("annotations") or []:
             store.add_annotation(ann)
+            annotations_added += 1
 
         src_path = _sibling_source(cir_path)
         if src_path is not None:
@@ -201,6 +203,7 @@ def seed_store_cmd(
     typer.echo("")
     typer.echo(
         f"Done. papers={papers_added} claims={claims_added} "
+        f"annotations={annotations_added} "
         f"sources={sources_added} pdfs={pdfs_added} "
         f"slugs_minted={minted_slugs}"
     )

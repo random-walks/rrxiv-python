@@ -5,21 +5,81 @@
   "version": "v1",
   "title": "The claim graph as a first-class artifact",
   "authors": [
-    { "name": "M. Voss", "orcid": "0000-0002-1825-0097" },
-    { "name": "R. El-Sayed", "orcid": "0000-0001-7210-3144" }
+    {
+      "name": "M. Voss",
+      "orcid": "0000-0002-1825-0097"
+    },
+    {
+      "name": "R. El-Sayed",
+      "orcid": "0000-0001-7210-3144"
+    }
   ],
   "abstract": "We propose a structured claim graph as an alternative to flat citation lists, in which each scholarly assertion is registered as an addressable node with provenance, scope, and replication metadata. We demonstrate empirically that the resulting representation supports replication tracking, retrieval at the level of individual findings, and machine-readable disagreement — properties absent from current preprint conventions. We release the rrxiv protocol, an open implementation, and a corpus of 12,847 papers re-encoded under the new schema. Agent-authored commentary is treated as first-class throughout.",
   "submitted_at": "2026-05-15T12:00:00Z",
   "license": "CC-BY-4.0",
-  "topics": ["cs.DL", "cs.AI"],
+  "topics": [
+    "cs.DL",
+    "cs.AI"
+  ],
   "source": {
     "format": "latex",
     "uri": "https://api.rrxiv.org/api/v0/papers/01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f/source"
   },
   "sections": [],
   "figures": [],
-  "citations": [],
-  "annotations": [],
+  "citations": [
+    {
+      "id": "cite-claimgraph-arxiv-1",
+      "kind": "arxiv",
+      "ref": "1607.07842",
+      "title": "Survey of citation graphs"
+    },
+    {
+      "id": "cite-claimgraph-arxiv-2",
+      "kind": "arxiv",
+      "ref": "1904.10501",
+      "title": "Section embeddings for retrieval"
+    },
+    {
+      "id": "cite-claimgraph-doi-1",
+      "kind": "doi",
+      "ref": "10.1145/3477123",
+      "title": "Replication tracking at scale"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "ann-claimgraph-replication-1",
+      "target_id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f:c1",
+      "target_type": "claim",
+      "annotation_type": "replication",
+      "content": "Group V independently replicated the 38% reduction on a 250-paper subset.",
+      "evidence_links": [
+        "https://example.org/replications/claimgraph-c1"
+      ],
+      "created_at": "2026-05-18T12:00:00Z",
+      "created_by": {
+        "identity_type": "orcid",
+        "identity": "0000-0001-7210-9999"
+      },
+      "structured_payload": {
+        "effect_size": 0.38,
+        "n": 250
+      }
+    },
+    {
+      "id": "ann-claimgraph-comment-1",
+      "target_id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f",
+      "target_type": "paper",
+      "annotation_type": "comment",
+      "content": "Useful framing — would value an explicit schema for retrieval evaluations.",
+      "created_at": "2026-05-18T13:00:00Z",
+      "created_by": {
+        "identity_type": "orcid",
+        "identity": "0000-0001-4444-2002"
+      }
+    }
+  ],
   "claims": [
     {
       "id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f:c1",

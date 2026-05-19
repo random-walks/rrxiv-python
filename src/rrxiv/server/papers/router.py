@@ -18,6 +18,7 @@ from fastapi import APIRouter, Query, Request
 
 from rrxiv.server.deps import get_store
 from rrxiv.server.errors import not_found
+from rrxiv.server.pagination import paginate
 from rrxiv.server.papers.projection import compute_stats, to_list_item
 from rrxiv.server.papers.scopes import filter_by_scope
 from rrxiv.server.papers.slug import find_paper_by_slug, is_slug
@@ -45,6 +46,16 @@ def list_papers(
         None,
         description="Filter to papers whose `topics[]` contains this string.",
     ),
+    cursor: str | None = Query(
+        None,
+        description="Opaque pagination cursor (RRP-0014).",
+    ),
+    limit: int | None = Query(
+        None,
+        ge=1,
+        le=200,
+        description="Maximum items per page. Defaults to 50.",
+    ),
 ) -> dict[str, Any]:
     store: Store = get_store(request)
     items = [to_list_item(p, store) for p in store.list_papers()]
@@ -56,7 +67,14 @@ def list_papers(
     if scope:
         items = filter_by_scope(items, scope)
 
-    return {"items": items, "next_cursor": None}
+    page, next_cursor = paginate(
+        items,
+        cursor=cursor,
+        limit=limit,
+        key=lambda p: (p.get("submitted_at") or "", p.get("id") or ""),
+        order="desc",
+    )
+    return {"items": page, "next_cursor": next_cursor}
 
 
 @router.get("/{paper_id}")

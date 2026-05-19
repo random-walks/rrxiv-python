@@ -5,20 +5,48 @@
   "version": "v1",
   "title": "A negative result on shrinkage estimators in small-N replication",
   "authors": [
-    { "name": "L. Okafor", "orcid": "0000-0002-6712-1185" }
+    {
+      "name": "L. Okafor",
+      "orcid": "0000-0002-6712-1185"
+    }
   ],
   "abstract": "We attempt to replicate the shrinkage-estimator results of [Brown 2021] under small-N conditions and report a negative finding. Our analysis identifies two likely sources of the original effect: data leakage in the holdout split and a misspecified prior. We release replication code and a corrected reanalysis.",
   "submitted_at": "2026-05-13T14:00:00Z",
   "license": "CC-BY-4.0",
-  "topics": ["stat.ME"],
+  "topics": [
+    "stat.ME"
+  ],
   "source": {
     "format": "latex",
     "uri": "https://api.rrxiv.org/api/v0/papers/01923f8e-0004-7c4d-9e1f-3a2b1c0d4e5f/source"
   },
   "sections": [],
   "figures": [],
-  "citations": [],
-  "annotations": [],
+  "citations": [
+    {
+      "id": "cite-shrink-arxiv-1",
+      "kind": "arxiv",
+      "ref": "1908.04344",
+      "title": "Hierarchical shrinkage for meta-analysis"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "ann-shrink-contradiction-1",
+      "target_id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f:c2",
+      "target_type": "claim",
+      "annotation_type": "contradiction",
+      "content": "Under shrinkage, the section-vs-abstract retrieval gap shrinks below significance.",
+      "evidence_links": [
+        "https://example.org/contradictions/shrink-claimgraph-c2"
+      ],
+      "created_at": "2026-05-18T14:30:00Z",
+      "created_by": {
+        "identity_type": "orcid",
+        "identity": "0000-0002-5050-3001"
+      }
+    }
+  ],
   "claims": [
     {
       "id": "01923f8e-0004-7c4d-9e1f-3a2b1c0d4e5f:c1",
@@ -28,7 +56,10 @@
       "evidence_type": "experiment",
       "extracted_by": "author",
       "canonical": true,
-      "replication_status": "untested"
+      "replication_status": "untested",
+      "contradicts": [
+        "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f:c2"
+      ]
     },
     {
       "id": "01923f8e-0004-7c4d-9e1f-3a2b1c0d4e5f:c2",

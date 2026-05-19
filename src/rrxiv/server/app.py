@@ -12,6 +12,7 @@ from rrxiv.server.auth.router import router as auth_router
 from rrxiv.server.auth.signature_middleware import (
     SignatureVerificationMiddleware,
 )
+from rrxiv.server.authors.router import router as authors_router
 from rrxiv.server.claims.router import router as claims_router
 from rrxiv.server.discovery.router import router as discovery_router
 from rrxiv.server.errors import install_exception_handlers
@@ -92,6 +93,7 @@ def build_app(
     api.include_router(snapshots_router)
     api.include_router(search_router)
     api.include_router(discovery_router)
+    api.include_router(authors_router)
     app.include_router(api, prefix=API_PREFIX)
 
     if settings.enable_cors:
