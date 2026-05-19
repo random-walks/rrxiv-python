@@ -66,7 +66,12 @@ class ServerSettings:
     """How long a write Idempotency-Key is remembered."""
 
     enable_cors: bool = True
-    """If True, attach a permissive CORS middleware on read endpoints."""
+    """If True, attach a CORS middleware on read endpoints."""
+
+    cors_origins: tuple[str, ...] = ()
+    """Allowlist of origins for the CORS middleware. Empty tuple = allow
+    ``*`` (suitable for dev_mode). In production set to the deployed web
+    origin(s) via ``RRXIV_CORS_ORIGINS=https://rrxiv.org,https://www.rrxiv.org``."""
 
     log_level: Literal["debug", "info", "warning", "error"] = "info"
 
@@ -159,4 +164,9 @@ class ServerSettings:
                 "IDEMPOTENCY_WINDOW_SECONDS", cls.idempotency_window_seconds
             ),
             enable_cors=get_bool("ENABLE_CORS", cls.enable_cors),
+            cors_origins=tuple(
+                o.strip()
+                for o in (get_str_required("CORS_ORIGINS", "") or "").split(",")
+                if o.strip()
+            ),
         )

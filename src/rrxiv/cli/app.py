@@ -392,6 +392,12 @@ snapshot_app = typer.Typer(
 app.add_typer(snapshot_app, name="snapshot")
 
 
+# Bulk seed (RRP-0012 / Phase 1 deployment).
+from rrxiv.cli.seed import seed_app  # noqa: E402
+
+app.add_typer(seed_app, name="seed-store", help="Bulk-load CIRs into a store, bypassing /submissions.")
+
+
 @snapshot_app.command("create")
 def snapshot_create(
     directory: Annotated[

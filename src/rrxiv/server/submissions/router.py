@@ -96,6 +96,22 @@ async def submit_paper(
     if previous_version:
         cir_data["previous_version"] = previous_version
 
+    # id_slug: server-minted on first submission (RRP-0013). A revision
+    # inherits its slug from the previous version — slugs are stable for
+    # the paper's identity. If the CIR somehow already carries a slug
+    # (e.g. a client mirroring a re-import), honour it.
+    if not cir_data.get("id_slug"):
+        from rrxiv.server.papers.slug import mint_slug
+
+        if previous_version:
+            prior = store.get_paper(previous_version)
+            if prior is not None and prior.get("id_slug"):
+                cir_data["id_slug"] = prior["id_slug"]
+            else:
+                cir_data["id_slug"] = mint_slug(store)
+        else:
+            cir_data["id_slug"] = mint_slug(store)
+
     # Idempotency.
     if idempotency_key:
         existing = store.get_idempotency(auth.token, idempotency_key)

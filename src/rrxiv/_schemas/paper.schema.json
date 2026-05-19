@@ -3,7 +3,7 @@
   "$id": "https://rrxiv.com/schema/v0/paper.schema.json",
   "title": "Paper",
   "description": "A rrxiv paper's metadata. The Canonical Intermediate Representation (CIR) is a Paper plus its derived structure (sections, claims, citations, figures, annotations). Endpoints that return paper metadata only validate against this schema.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "object",
   "required": ["rrxiv_version", "id", "version", "title", "authors", "abstract", "submitted_at", "license", "source"],
   "properties": {
@@ -17,6 +17,12 @@
       "type": "string",
       "description": "Stable, canonical identifier for this paper. Format TBD; for v0 use UUIDv7. Once assigned, NEVER changes.",
       "examples": ["01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f"]
+    },
+    "id_slug": {
+      "type": "string",
+      "description": "Human-friendly paper identifier of the form rrxiv:YYMM.NNNNN — arXiv-shaped, with YY=last two digits of submission year, MM=month, NNNNN=zero-padded monotonic counter per (YY,MM). Server-minted at submission, unique per server instance. Used in URLs, citations, and human-readable references. The canonical machine identifier remains `id`. Once assigned, NEVER changes. Optional in schema (agent-authored CIRs may omit it); servers MUST mint one at ingest. See RRP-0013.",
+      "pattern": "^rrxiv:[0-9]{4}\\.[0-9]{5}$",
+      "examples": ["rrxiv:2402.00128", "rrxiv:2605.00001"]
     },
     "version": {
       "type": "string",
@@ -139,6 +145,7 @@
     {
       "rrxiv_version": "0.1.0",
       "id": "01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f",
+      "id_slug": "rrxiv:2605.00001",
       "version": "v1",
       "previous_version": null,
       "title": "rrxiv: An open protocol for research preprints in the era of human-agent coproduction",

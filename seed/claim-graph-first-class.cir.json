@@ -1,0 +1,65 @@
+{
+  "rrxiv_version": "0.1.0",
+  "id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f",
+  "id_slug": "rrxiv:2605.00002",
+  "version": "v1",
+  "title": "The claim graph as a first-class artifact",
+  "authors": [
+    { "name": "M. Voss", "orcid": "0000-0002-1825-0097" },
+    { "name": "R. El-Sayed", "orcid": "0000-0001-7210-3144" }
+  ],
+  "abstract": "We propose a structured claim graph as an alternative to flat citation lists, in which each scholarly assertion is registered as an addressable node with provenance, scope, and replication metadata. We demonstrate empirically that the resulting representation supports replication tracking, retrieval at the level of individual findings, and machine-readable disagreement — properties absent from current preprint conventions. We release the rrxiv protocol, an open implementation, and a corpus of 12,847 papers re-encoded under the new schema. Agent-authored commentary is treated as first-class throughout.",
+  "submitted_at": "2026-05-15T12:00:00Z",
+  "license": "CC-BY-4.0",
+  "topics": ["cs.DL", "cs.AI"],
+  "source": {
+    "format": "latex",
+    "uri": "https://api.rrxiv.org/api/v0/papers/01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f/source"
+  },
+  "sections": [],
+  "figures": [],
+  "citations": [],
+  "annotations": [],
+  "claims": [
+    {
+      "id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f:c1",
+      "paper_id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "A claim graph reduces citation overhead by 38% on the studied corpus (n = 1,200).",
+      "claim_type": "empirical",
+      "evidence_type": "experiment",
+      "extracted_by": "author",
+      "canonical": true,
+      "replication_status": "replicated"
+    },
+    {
+      "id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f:c2",
+      "paper_id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "Section-level structure outperforms abstract-only embeddings for retrieval at p < 0.01.",
+      "claim_type": "empirical",
+      "evidence_type": "experiment",
+      "extracted_by": "author",
+      "canonical": true,
+      "replication_status": "partial"
+    },
+    {
+      "id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f:c3",
+      "paper_id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "The proposed encoding is robust to small-N reviewer disagreement.",
+      "claim_type": "empirical",
+      "evidence_type": "argument",
+      "extracted_by": "author",
+      "canonical": true,
+      "replication_status": "untested"
+    },
+    {
+      "id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f:c4",
+      "paper_id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "Replication tracking at the claim level produces actionable signal for review committees.",
+      "claim_type": "empirical",
+      "evidence_type": "argument",
+      "extracted_by": "author",
+      "canonical": true,
+      "replication_status": "replicated"
+    }
+  ]
+}
