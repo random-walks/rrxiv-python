@@ -159,20 +159,55 @@ def _mint_paper_id() -> str:
 sources_router = APIRouter(prefix="/papers", tags=["Papers"])
 
 
+def _resolve(paper_id: str, store: Store) -> dict[str, Any] | None:
+    """Resolve a paper by canonical id or slug. Inline-imported so the
+    submissions module doesn't pull the slug module at import time."""
+    from rrxiv.server.papers.slug import find_paper_by_slug, is_slug
+
+    if is_slug(paper_id):
+        return find_paper_by_slug(store, paper_id)
+    return store.get_paper(paper_id)
+
+
 @sources_router.get("/{paper_id}/source")
 def get_paper_source(paper_id: str, request: Request) -> Response:
     """Stream a paper's source archive."""
     store: Store = get_store(request)
-    if store.get_paper(paper_id) is None:
+    paper = _resolve(paper_id, store)
+    if paper is None:
         raise not_found(f"paper {paper_id} not found")
-    blob = store.load_source(paper_id)
+    canonical_id = paper["id"]
+    blob = store.load_source(canonical_id)
     if blob is None:
         raise not_found(f"paper {paper_id} has no source archive")
+    filename = paper.get("id_slug") or canonical_id
     return Response(
         content=blob,
         media_type="application/gzip",
         headers={
-            "Content-Disposition": f'attachment; filename="{paper_id}.tar.gz"'
+            "Content-Disposition": f'attachment; filename="{filename}.tar.gz"'
+        },
+    )
+
+
+@sources_router.get("/{paper_id}/pdf")
+def get_paper_pdf(paper_id: str, request: Request) -> Response:
+    """Stream a paper's compiled PDF, if the server has one bundled."""
+    store: Store = get_store(request)
+    paper = _resolve(paper_id, store)
+    if paper is None:
+        raise not_found(f"paper {paper_id} not found")
+    canonical_id = paper["id"]
+    blob = store.load_rendered_pdf(canonical_id)
+    if blob is None:
+        raise not_found(f"paper {paper_id} has no rendered PDF")
+    filename = paper.get("id_slug") or canonical_id
+    return Response(
+        content=blob,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}.pdf"',
+            "Cache-Control": "public, max-age=3600",
         },
     )
 

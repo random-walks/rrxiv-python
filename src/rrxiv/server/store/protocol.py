@@ -139,6 +139,12 @@ class Store(Protocol):
     server-relative URI clients can fetch via /papers/{id}/source."""
     def load_source(self, paper_id: str) -> bytes | None: ...
 
+    # ----- Rendered artifacts (PDF / HTML) -----
+    def save_rendered_pdf(self, paper_id: str, blob: bytes) -> str: ...
+    """Persist a compiled PDF; return the URI clients can fetch via
+    GET /papers/{id}/pdf."""
+    def load_rendered_pdf(self, paper_id: str) -> bytes | None: ...
+
     # ----- Snapshots -----
     def latest_snapshot(self) -> dict[str, Any] | None: ...
     def set_latest_snapshot(self, manifest: dict[str, Any]) -> None: ...
@@ -174,4 +180,5 @@ class StoreState:
     idempotency: dict[tuple[str, str], IdempotencyEntry] = field(default_factory=dict)
     rate_window: dict[str, list[int]] = field(default_factory=dict)
     sources: dict[str, bytes] = field(default_factory=dict)
+    rendered_pdfs: dict[str, bytes] = field(default_factory=dict)
     snapshot_blobs: dict[str, bytes] = field(default_factory=dict)

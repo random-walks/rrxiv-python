@@ -15,7 +15,8 @@
   "topics": ["infrastructure", "scientific-publishing", "protocol-design"],
   "source": {
     "format": "latex",
-    "uri": "https://api.rrxiv.org/api/v0/papers/01923f8e-0001-7c4d-9e1f-3a2b1c0d4e5f/source"
+    "uri": "https://api.rrxiv.org/api/v0/papers/01923f8e-0001-7c4d-9e1f-3a2b1c0d4e5f/source",
+    "rendered_pdf_uri": "https://api.rrxiv.org/api/v0/papers/01923f8e-0001-7c4d-9e1f-3a2b1c0d4e5f/pdf"
   },
   "sections": [],
   "figures": [],

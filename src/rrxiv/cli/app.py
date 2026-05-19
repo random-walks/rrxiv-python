@@ -96,11 +96,28 @@ def serve(
             "--store", help="Backend URL: memory:// or sqlite:///path."
         ),
     ] = "memory://",
+    seed_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--seed-dir",
+            help=(
+                "Directory of *.cir.json files to seed on first boot. "
+                "Skipped if the store is already non-empty."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Start the rrxiv reference FastAPI server."""
     from rrxiv.cli.serve import serve as _serve
 
-    _serve(host=host, port=port, dev_mode=dev_mode, reload=reload, store=store)
+    _serve(
+        host=host,
+        port=port,
+        dev_mode=dev_mode,
+        reload=reload,
+        store=store,
+        seed_dir=seed_dir,
+    )
 
 
 @app.command()

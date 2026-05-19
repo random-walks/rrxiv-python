@@ -79,6 +79,22 @@ def _sibling_source(cir_path: Path) -> Path | None:
     return None
 
 
+def _sibling_pdf(cir_path: Path) -> Path | None:
+    """Find a rendered PDF sibling to a CIR file, if any."""
+    if cir_path.name == "cir.json":
+        candidates = [cir_path.parent / "paper.pdf", cir_path.parent / "rendered.pdf"]
+    else:
+        stem = cir_path.name[: -len(".cir.json")]
+        candidates = [
+            cir_path.parent / f"{stem}.pdf",
+            cir_path.parent / f"{stem}.rendered.pdf",
+        ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
 @seed_app.callback(invoke_without_command=True)
 def seed_store_cmd(
     from_: Annotated[
@@ -124,6 +140,7 @@ def seed_store_cmd(
     papers_added = 0
     claims_added = 0
     sources_added = 0
+    pdfs_added = 0
     minted_slugs = 0
 
     for cir_path in cir_files:
@@ -170,6 +187,11 @@ def seed_store_cmd(
             store.save_source(paper_id, src_path.read_bytes())
             sources_added += 1
 
+        pdf_path = _sibling_pdf(cir_path)
+        if pdf_path is not None:
+            store.save_rendered_pdf(paper_id, pdf_path.read_bytes())
+            pdfs_added += 1
+
         if not quiet:
             typer.echo(
                 f"  load: {cir_path.relative_to(from_)} → "
@@ -179,5 +201,6 @@ def seed_store_cmd(
     typer.echo("")
     typer.echo(
         f"Done. papers={papers_added} claims={claims_added} "
-        f"sources={sources_added} slugs_minted={minted_slugs}"
+        f"sources={sources_added} pdfs={pdfs_added} "
+        f"slugs_minted={minted_slugs}"
     )
