@@ -3,7 +3,7 @@
   "$id": "https://rrxiv.com/schema/v0/cir.schema.json",
   "title": "Canonical Intermediate Representation (CIR)",
   "description": "The full structured representation of a rrxiv paper. A Paper's metadata plus its derived structure (sections, claims, citations, figures, annotations). Extracted from TeX/Typst source by the rrxiv parser. The unit of agent-readable knowledge in the rrxiv corpus.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "object",
   "required": ["rrxiv_version", "id", "version", "title", "authors", "abstract", "submitted_at", "license", "source"],
   "properties": {

@@ -3,7 +3,7 @@
   "$id": "https://rrxiv.com/schema/v0/claim.schema.json",
   "title": "Claim",
   "description": "A single falsifiable assertion extracted from a paper. The unit of structured knowledge in the rrxiv corpus. Claim graph edges (depends_on, supports, contradicts, extends) connect claims across papers.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "object",
   "required": ["id", "statement", "claim_type", "evidence_type"],
   "properties": {
@@ -84,15 +84,42 @@
       "items": { "type": "string" },
       "description": "Free-form labels (e.g. 'load-bearing', 'speculative', 'background')."
     },
+    "proof": {
+      "type": ["string", "null"],
+      "description": "Plain-text proof or evidence body that accompanies this claim. Extracted from the paired `evidence` environment in the source (parser pairs `\\label{prop:X.Y}` to `\\label{ev:X.Y}`). Multi-paragraph; preserves `$...$` math markers verbatim so renderers can hand off to KaTeX or MathJax. `\\dependson` lines are stripped (the edge information already lives in `depends_on`). Optional; CIRs without a paired evidence block omit this field. See RRP-0015."
+    },
+    "figures": {
+      "type": "array",
+      "description": "Figures referenced inside the proof body via `\\input{figures/...}`. Each entry records the source-relative path to the figure file and optionally its caption. Paths are relative to the paper's source-archive root (the tarball at `source.uri`). Optional; populated by the parser when the evidence block contains figure inputs. See RRP-0015.",
+      "items": { "$ref": "#/$defs/ClaimFigure" }
+    },
     "source_location": {
       "type": ["object", "null"],
-      "description": "Where in the source the claim originates, for provenance.",
+      "description": "Where in the source the claim originates, for provenance. Combines the prior section-level provenance fields with file/line span coordinates for the `\\begin{claim}...\\end{claim}` block plus the immediately-following `\\begin{evidence}...\\end{evidence}` block. Lines are 1-indexed. In multi-file papers, `file` is the source-archive-relative path resolved via the flatten-tex marker comments (`% [flatten-tex.py] inlined: <path>` / `% [flatten-tex.py] end: <path>`); single-file papers report the source filename. See RRP-0015.",
       "properties": {
         "section_id": { "type": "string" },
         "paragraph": { "type": ["integer", "null"], "minimum": 0 },
-        "raw_source_excerpt": { "type": ["string", "null"] }
+        "raw_source_excerpt": { "type": ["string", "null"] },
+        "file": {
+          "type": ["string", "null"],
+          "description": "Source-archive-relative path to the file containing the claim, e.g. `books/book01.tex`."
+        },
+        "line_start": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "1-indexed line number of the `\\begin{claim}` in `file`."
+        },
+        "line_end": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "1-indexed line number of the `\\end{evidence}` (or `\\end{claim}` when no evidence block follows) in `file`."
+        }
       },
       "additionalProperties": false
+    },
+    "pdf_anchor": {
+      "type": ["string", "null"],
+      "description": "URL fragment that pins the rendered PDF to the page (or named destination) where the claim appears. Typically `#page=N` for raw page anchors, or `#nameddest=<id>` when the PDF carries named destinations. Optional; the parser leaves this null because computing the page number requires the rendered PDF cross-reference table (operators or downstream pipelines populate it). Specified here so future generators have a stable place to put it. See RRP-0015."
     },
     "extracted_by": {
       "type": "string",
@@ -105,6 +132,24 @@
       "description": "True if confirmed by paper author or via quorum of credentialed annotators."
     }
   },
+  "$defs": {
+    "ClaimFigure": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Source-archive-relative path to the figure file (e.g. `figures/fig-i-10.tex`). The figure is bundled in the paper's `source.tar.gz` and resolved relative to its root."
+        },
+        "caption": {
+          "type": ["string", "null"],
+          "description": "Plain-text figure caption. Optional; the parser populates it when the figure file contains a `\\caption{...}` macro."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
   "examples": [
     {
       "id": "01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f:queryability",
@@ -114,6 +159,28 @@
       "evidence_type": "argument",
       "depends_on": ["01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f:volume-structure"],
       "labels": ["load-bearing"],
+      "extracted_by": "author",
+      "canonical": true
+    },
+    {
+      "id": "01923f8e-0009-7c4d-9e1f-3a2b1c0d4e5f:prop:I.1",
+      "paper_id": "01923f8e-0009-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "On a given finite straight line to construct an equilateral triangle.",
+      "claim_type": "theoretical",
+      "evidence_type": "proof",
+      "proof": "Let $AB$ be the given finite straight line. With centre $A$ and distance $AB$ describe the circle $BCD$ (Postulate 3). With centre $B$ and distance $BA$ describe the circle $ACE$ (Postulate 3). From the point $C$, where the circles cut one another, draw $CA$ and $CB$ (Postulate 1). Since $A$ is the centre of $BCD$, $AC = AB$ (Definition I.15). Since $B$ is the centre of $ACE$, $BC = BA$ (Definition I.15). By Common Notion 1, $AC = BC$. Therefore the triangle $ABC$ is equilateral.",
+      "figures": [
+        {
+          "path": "figures/fig-i-1.tex",
+          "caption": "Proposition I.1. The two circles with centres $A$ and $B$ and common radius $AB$ meet at $C$; the triangle $ABC$ is equilateral."
+        }
+      ],
+      "source_location": {
+        "file": "books/book01.tex",
+        "line_start": 13,
+        "line_end": 31
+      },
+      "pdf_anchor": "#page=12",
       "extracted_by": "author",
       "canonical": true
     }

@@ -1,0 +1,22 @@
+% chapter01.tex — chapter for the multi-file meaty-claim fixture.
+%
+% The claim and its paired evidence both live in this file; after
+% flatten-tex inlines them into main.tex, the parser's SourceMap must
+% map the flat-source positions back to this filename and to the
+% original-file line numbers.
+
+\section{The first chapter}
+\label{sec:ch1}
+
+\begin{claim}[Proposition: the squares stack]
+\label{prop:stack}
+The squares of consecutive integers differ by an odd number.
+\end{claim}
+
+\begin{evidence}[Proof of stack]
+\label{ev:stack}
+\input{figures/fig-stack}
+For any integer $n$, the identity $(n+1)^2 - n^2 = 2n + 1$ holds.
+Since $2n + 1$ is odd for any integer $n$, the difference is odd.
+\dependson{stack}{post:arith}
+\end{evidence}

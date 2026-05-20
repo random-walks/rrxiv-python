@@ -116,6 +116,22 @@ def _strip_special_macros(text: str) -> str:
     return text
 
 
+# Edge-declaration macros from rrxiv.cls. Their info already lives on the
+# Claim's depends_on / supports / contradicts / extends edges (extracted
+# from the sidecar), so re-emitting them in a rendered proof body would
+# be redundant noise. Stripping them is a tex_to_proof_text-specific
+# step (we keep them in the generic tex_to_text path because abstracts
+# and titles do not contain edge macros in practice and we don't want to
+# expand tex_to_text's responsibility).
+_EDGE_MACRO_RE = re.compile(
+    r"\\(?:dependson|supports|contradicts|extends)\s*\{[^{}]*\}\s*\{[^{}]*\}"
+)
+# \input{...} / \include{...} references — the parser captures these
+# separately into the Claim's `figures` array, so they're stripped from
+# the rendered proof text.
+_INPUT_MACRO_RE = re.compile(r"\\(?:input|include)\s*\{[^{}]*\}")
+
+
 def _strip_line_breaks(text: str) -> str:
     # \\[Xpt] or \\ at end of line -> single space
     text = re.sub(r"\\\\\s*(?:\[[^\]]*\])?", " ", text)
@@ -157,3 +173,44 @@ def tex_to_text(text: str) -> str:
     text = _strip_line_breaks(text)
     text = _normalize_whitespace(text)
     return text
+
+
+def _strip_line_comments(text: str) -> str:
+    """Drop LaTeX line comments (``%`` to end of line).
+
+    A literal ``%`` is escaped in LaTeX as ``\\%``; preserve those. We
+    match unescaped ``%`` from a non-backslash boundary (or beginning of
+    line) to the next newline.
+
+    Pylatexenc's ``latex_verbatim`` preserves comments as part of an
+    environment's body, including comments inserted by the
+    ``flatten-tex.py`` pre-pass (``% [flatten-tex.py] inlined: …``).
+    Stripping them here keeps them out of ``Claim.proof``.
+    """
+    return re.sub(r"(^|[^\\])%[^\n]*", lambda m: m.group(1), text, flags=re.MULTILINE)
+
+
+def tex_to_proof_text(text: str) -> str:
+    """Convert an ``\\begin{evidence}...\\end{evidence}`` body to plain
+    text suitable for ``Claim.proof``.
+
+    Same contract as :func:`tex_to_text` — preserves ``$...$`` math
+    markers, strips cosmetic macros, normalises whitespace — with three
+    extra strips that are evidence-block-specific:
+
+    - LaTeX line comments (``%...\\n``) are dropped. The parser's TeX
+      walker preserves them in the captured body via ``latex_verbatim``,
+      but they're never content the reader wants to see.
+    - ``\\dependson{}{}`` and friends (``\\supports``, ``\\contradicts``,
+      ``\\extends``) are dropped. Their information already rides on the
+      Claim's edge arrays; re-emitting them in the rendered proof would
+      be noise.
+    - ``\\input{...}`` / ``\\include{...}`` references are dropped. The
+      parser captures figure inputs into the Claim's ``figures`` array
+      separately; the proof text reads better without bare ``\\input``
+      calls (they don't render to anything in a plain-text view).
+    """
+    text = _strip_line_comments(text)
+    text = _EDGE_MACRO_RE.sub("", text)
+    text = _INPUT_MACRO_RE.sub("", text)
+    return tex_to_text(text)

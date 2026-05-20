@@ -104,13 +104,25 @@ class TexSection:
 
 @dataclass(frozen=True, slots=True)
 class TexEnvironment:
-    """A semantic environment block from rrxiv.cls."""
+    """A semantic environment block from rrxiv.cls.
+
+    ``char_offset`` is the byte offset of ``\\begin{<env>}`` in the source.
+    ``char_end`` is the byte offset of the character just past the
+    matching ``\\end{<env>}``; callers can convert both to 1-indexed line
+    numbers by counting newlines up to each offset. ``inputs`` is the
+    tuple of ``\\input{<path>}`` (and ``\\include{<path>}``) references
+    that appear inside the environment's body — the parser captures them
+    verbatim so build.py can attach figures to a claim's paired
+    evidence block.
+    """
 
     name: str  # one of TEX_ENV_NAMES
     title: str | None
     label: str | None
     body: str
     char_offset: int
+    char_end: int = 0
+    inputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,6 +325,22 @@ def _scan_cites_in_nodes(nodes: list[Any], out: list[TexCitation]) -> None:
             _scan_cites_in_nodes(n.nodelist, out)
 
 
+def _scan_inputs_in_nodes(nodes: list[Any], out: list[str]) -> None:
+    """Collect ``\\input{<path>}`` and ``\\include{<path>}`` references
+    recursively. Order-preserving; duplicates retained — callers can
+    de-dupe if needed.
+    """
+    for i, n in enumerate(nodes):
+        if isinstance(n, _lw.LatexMacroNode) and n.macroname in ("input", "include"):
+            arg, _ = _next_group_arg(nodes, i)
+            if arg:
+                out.append(arg.strip())
+        if isinstance(n, _lw.LatexEnvironmentNode):
+            _scan_inputs_in_nodes(n.nodelist, out)
+        if isinstance(n, _lw.LatexGroupNode):
+            _scan_inputs_in_nodes(n.nodelist, out)
+
+
 def _env_optional_title(env: _lw.LatexEnvironmentNode) -> str | None:
     """Pull the first optional ``[title]`` arg from an environment's
     declared args, or scan the head of the body."""
@@ -370,13 +398,23 @@ def _walk(
                     end = body_text.find("]")
                     body_text = body_text[end + 1 :].lstrip()
                 label = _scan_label_in_nodes(n.nodelist)
+                inputs_list: list[str] = []
+                _scan_inputs_in_nodes(n.nodelist, inputs_list)
+                pos = getattr(n, "pos", 0) or 0
+                # pos + len(latex_verbatim) gives the byte offset *just
+                # past* \end{<env>}. pylatexenc preserves the verbatim
+                # source span for environment nodes, so this is exact
+                # rather than an estimate.
+                end_offset = pos + len(_verbatim(n))
                 environments.append(
                     TexEnvironment(
                         name=env_name,
                         title=opt_title,
                         label=label,
                         body=body_text,
-                        char_offset=getattr(n, "pos", 0) or 0,
+                        char_offset=pos,
+                        char_end=end_offset,
+                        inputs=tuple(inputs_list),
                     )
                 )
             elif env_name == "document":
