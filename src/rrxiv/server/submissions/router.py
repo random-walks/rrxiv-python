@@ -190,6 +190,151 @@ def get_paper_source(paper_id: str, request: Request) -> Response:
     )
 
 
+@sources_router.get("/{paper_id}/source/manifest")
+def get_paper_source_manifest(paper_id: str, request: Request) -> dict[str, Any]:
+    """List the files inside the source archive.
+
+    Returns ``{"files": [{"path": ..., "size": ..., "kind": ...}]}``.
+    ``kind`` is one of ``tex``, ``cls``, ``sty``, ``bib``, ``image``,
+    ``other`` — the web client uses it to pick a syntax highlighter
+    and decide whether to render the file inline.
+    """
+    import io
+    import tarfile
+
+    store: Store = get_store(request)
+    paper = _resolve(paper_id, store)
+    if paper is None:
+        raise not_found(f"paper {paper_id} not found")
+    canonical_id = paper["id"]
+    blob = store.load_source(canonical_id)
+    if blob is None:
+        raise not_found(f"paper {paper_id} has no source archive")
+
+    files: list[dict[str, Any]] = []
+    try:
+        with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:
+            for member in tar.getmembers():
+                if not member.isfile():
+                    continue
+                files.append(
+                    {
+                        "path": member.name,
+                        "size": member.size,
+                        "kind": _classify_source_file(member.name),
+                    }
+                )
+    except tarfile.TarError as e:
+        raise not_found(
+            f"paper {paper_id} source archive is unreadable: {e}"
+        ) from e
+
+    files.sort(key=lambda f: (_source_sort_key(f["path"]), f["path"]))
+    return {"paper_id": canonical_id, "files": files}
+
+
+@sources_router.get("/{paper_id}/source/file")
+def get_paper_source_file(
+    paper_id: str, path: str, request: Request
+) -> Response:
+    """Stream one file from the source archive as UTF-8 text.
+
+    ``path`` is a tar member name from ``/source/manifest``. The
+    response is ``text/plain`` for source files (.tex, .cls, .sty,
+    .bib) and ``application/octet-stream`` for everything else (the
+    client uses the manifest to decide what to render).
+    """
+    import io
+    import tarfile
+
+    store: Store = get_store(request)
+    paper = _resolve(paper_id, store)
+    if paper is None:
+        raise not_found(f"paper {paper_id} not found")
+    canonical_id = paper["id"]
+    blob = store.load_source(canonical_id)
+    if blob is None:
+        raise not_found(f"paper {paper_id} has no source archive")
+
+    # Defensive: tarball member names should be relative, but reject
+    # anything that tries to traverse via "..".
+    if ".." in path.split("/"):
+        raise not_found(f"path {path!r} is not in the archive")
+
+    try:
+        with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:
+            try:
+                member = tar.getmember(path)
+            except KeyError as e:
+                raise not_found(
+                    f"path {path!r} is not in the archive"
+                ) from e
+            if not member.isfile():
+                raise not_found(f"path {path!r} is not a regular file")
+            handle = tar.extractfile(member)
+            if handle is None:
+                raise not_found(f"path {path!r} could not be read")
+            content = handle.read()
+    except tarfile.TarError as e:
+        raise not_found(
+            f"paper {paper_id} source archive is unreadable: {e}"
+        ) from e
+
+    kind = _classify_source_file(path)
+    if kind in {"tex", "cls", "sty", "bib", "other"} and len(content) < 5_000_000:
+        # Render as text if it's plausibly a source file.
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            return Response(
+                content=content, media_type="application/octet-stream"
+            )
+        return Response(content=text, media_type="text/plain; charset=utf-8")
+    return Response(content=content, media_type="application/octet-stream")
+
+
+_SOURCE_KIND_BY_EXT: dict[str, str] = {
+    ".tex": "tex",
+    ".cls": "cls",
+    ".sty": "sty",
+    ".bib": "bib",
+    ".bbl": "bib",
+    ".png": "image",
+    ".jpg": "image",
+    ".jpeg": "image",
+    ".pdf": "image",
+    ".svg": "image",
+}
+
+
+def _classify_source_file(path: str) -> str:
+    """Bucket a tar member name into a UI kind."""
+    lower = path.lower()
+    for ext, kind in _SOURCE_KIND_BY_EXT.items():
+        if lower.endswith(ext):
+            return kind
+    return "other"
+
+
+def _source_sort_key(path: str) -> int:
+    """Order: main.tex first, then *.tex, then everything else.
+
+    Web client opens the first entry by default; surface the
+    plausibly-relevant file at the top.
+    """
+    lower = path.lower()
+    base = lower.rsplit("/", 1)[-1]
+    if base in {"main.tex", "main-flat.tex", "paper.tex"}:
+        return 0
+    if lower.endswith(".tex"):
+        return 1
+    if lower.endswith((".cls", ".sty")):
+        return 2
+    if lower.endswith(".bib"):
+        return 3
+    return 4
+
+
 @sources_router.get("/{paper_id}/pdf")
 def get_paper_pdf(paper_id: str, request: Request) -> Response:
     """Stream a paper's compiled PDF, if the server has one bundled."""

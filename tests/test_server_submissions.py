@@ -147,6 +147,92 @@ def test_paper_source_404_when_unknown_paper() -> None:
     assert resp.status_code == 404
 
 
+def _tarball_with(files: dict[str, str]) -> bytes:
+    """Helper: build a tar.gz bundle from a dict of filename → text."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for name, content in files.items():
+            data = content.encode("utf-8")
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    return buf.getvalue()
+
+
+def test_paper_source_manifest_lists_files() -> None:
+    _, sync, _ = _client_with_orcid_bearer()
+    cir = _fixture_paper("p-manifest")
+    bundle = _tarball_with(
+        {
+            "main.tex": "\\documentclass{article}\\begin{document}hi\\end{document}",
+            "rrxiv.cls": "% class file",
+            "refs.bib": "@misc{x, title={x}}",
+        }
+    )
+    sync.post(
+        "/submissions",
+        files={
+            "cir": ("c.json", json.dumps(cir).encode("utf-8"), "application/json"),
+            "bundle": ("p.tar.gz", bundle, "application/gzip"),
+        },
+    )
+    resp = sync.get("/papers/p-manifest/source/manifest")
+    sync.close()
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["paper_id"] == "p-manifest"
+    paths = [f["path"] for f in body["files"]]
+    # main.tex comes first by the sort key.
+    assert paths[0] == "main.tex"
+    assert "rrxiv.cls" in paths and "refs.bib" in paths
+    kinds = {f["path"]: f["kind"] for f in body["files"]}
+    assert kinds["main.tex"] == "tex"
+    assert kinds["rrxiv.cls"] == "cls"
+    assert kinds["refs.bib"] == "bib"
+
+
+def test_paper_source_file_returns_utf8_text() -> None:
+    _, sync, _ = _client_with_orcid_bearer()
+    cir = _fixture_paper("p-srcfile")
+    main_tex = "\\section{Hello}\nworld\n"
+    bundle = _tarball_with({"main.tex": main_tex})
+    sync.post(
+        "/submissions",
+        files={
+            "cir": ("c.json", json.dumps(cir).encode("utf-8"), "application/json"),
+            "bundle": ("p.tar.gz", bundle, "application/gzip"),
+        },
+    )
+    resp = sync.get("/papers/p-srcfile/source/file?path=main.tex")
+    sync.close()
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/plain")
+    assert resp.text == main_tex
+
+
+def test_paper_source_file_rejects_path_traversal() -> None:
+    _, sync, _ = _client_with_orcid_bearer()
+    cir = _fixture_paper("p-traversal")
+    bundle = _tarball_with({"main.tex": "x"})
+    sync.post(
+        "/submissions",
+        files={
+            "cir": ("c.json", json.dumps(cir).encode("utf-8"), "application/json"),
+            "bundle": ("p.tar.gz", bundle, "application/gzip"),
+        },
+    )
+    resp = sync.get("/papers/p-traversal/source/file?path=../etc/passwd")
+    sync.close()
+    assert resp.status_code == 404
+
+
+def test_paper_source_manifest_404_when_no_source() -> None:
+    _, sync, _ = _client_with_orcid_bearer()
+    resp = sync.get("/papers/nope/source/manifest")
+    sync.close()
+    assert resp.status_code == 404
+
+
 # ----- Versions -----
 
 

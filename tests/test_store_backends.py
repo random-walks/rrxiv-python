@@ -117,6 +117,50 @@ def test_source_round_trip(store: Store) -> None:
     assert store.load_source("p1") == blob
 
 
+def test_clear_corpus_truncates_papers_and_blobs(store: Store) -> None:
+    """``clear_corpus`` drops papers/CIRs/claims/annotations/sources/PDFs
+    but leaves tokens, agents, and snapshot metadata intact (those are
+    operational state, separate from the read-corpus)."""
+    # Seed both corpus + operational state.
+    store.add_paper({"id": "p1", "title": "x"})
+    store.add_cir({"id": "p1", "claims": [], "annotations": []})
+    store.add_claim({"id": "p1:c1", "paper_id": "p1", "statement": "x"})
+    store.add_annotation(
+        {
+            "id": "ann-1",
+            "target_id": "p1",
+            "target_type": "paper",
+            "annotation_type": "comment",
+            "content": "x",
+            "created_at": "2026-05-20T00:00:00Z",
+            "created_by": {"identity_type": "anonymous", "identity": ""},
+        }
+    )
+    store.save_source("p1", b"bytes")
+    store.save_rendered_pdf("p1", b"%PDF")
+
+    # Operational state — should survive.
+    tok = TokenRecord(
+        token="keep",
+        identity=AgentIdentity(handle="@x"),
+        issued_at_unix=1,
+        expires_at_unix=2,
+    )
+    store.add_token(tok)
+
+    store.clear_corpus()
+
+    assert store.list_papers() == []
+    assert store.list_claims() == []
+    assert store.list_annotations() == []
+    assert store.get_cir("p1") is None
+    assert store.load_source("p1") is None
+    assert store.load_rendered_pdf("p1") is None
+
+    # But tokens are untouched.
+    assert store.get_token("keep") == tok
+
+
 def test_snapshot_blob_round_trip(store: Store) -> None:
     blob = b"snapshot tarball"
     uri = store.save_snapshot_blob("snap1", blob)

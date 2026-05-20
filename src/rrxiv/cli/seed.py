@@ -265,6 +265,18 @@ def seed_store_cmd(
             "--quiet", "-q", help="Suppress per-file progress output."
         ),
     ] = False,
+    reset: Annotated[
+        bool,
+        typer.Option(
+            "--reset",
+            help=(
+                "Truncate every paper/CIR/claim/annotation/source/PDF "
+                "row before re-seeding. Use when claim ids or paper ids "
+                "have changed between releases so the store doesn't keep "
+                "orphans alongside the new canonical records."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Bulk-load CIRs into a Store, bypassing /submissions."""
     if not from_.is_dir():
@@ -272,6 +284,15 @@ def seed_store_cmd(
         raise typer.Exit(code=2)
 
     store = store_from_url(store_url)
+
+    if reset:
+        store.clear_corpus()
+        if not quiet:
+            typer.secho(
+                "Cleared existing corpus (papers/CIRs/claims/annotations/sources/PDFs).",
+                fg="yellow",
+            )
+
     cir_files = _iter_cir_files(from_)
     if not cir_files:
         typer.secho(
@@ -329,15 +350,6 @@ def seed_store_cmd(
                 fg="yellow",
             )
 
-        paper_metadata = {
-            k: v
-            for k, v in cir.items()
-            if k not in ("claims", "citations", "annotations", "sections", "figures")
-        }
-        store.add_paper(paper_metadata)
-        store.add_cir(cir)
-        papers_added += 1
-
         # The rrxiv parser stamps claim.id / claim.paper_id / edge
         # targets with the meta-slug prefix (e.g.\ "my-paper:prop:I.1")
         # because at parse-time it doesn't know the canonical UUID the
@@ -351,6 +363,35 @@ def seed_store_cmd(
                 f"    canonicalised {rewrites} id/paper_id/edge references"
             )
 
+        # Save source archive + rendered PDF first so we can stamp the
+        # canonical API URIs onto the paper record itself. The CIR
+        # produced by ``rrxiv parse`` carries a ``file://...`` URI
+        # pointing at the build directory; that's useless from the
+        # web client. Rewrite to the server-relative endpoint the
+        # store exposes (``/api/v0/papers/{id}/{source,pdf}``).
+        src_path = _sibling_source(cir_path)
+        if src_path is not None:
+            source_uri = store.save_source(paper_id, src_path.read_bytes())
+            cir.setdefault("source", {})
+            cir["source"]["uri"] = source_uri
+            cir["source"].setdefault("format", "latex")
+            sources_added += 1
+
+        pdf_path = _sibling_pdf(cir_path)
+        if pdf_path is not None:
+            pdf_uri = store.save_rendered_pdf(paper_id, pdf_path.read_bytes())
+            cir["rendered_pdf_uri"] = pdf_uri
+            pdfs_added += 1
+
+        paper_metadata = {
+            k: v
+            for k, v in cir.items()
+            if k not in ("claims", "citations", "annotations", "sections", "figures")
+        }
+        store.add_paper(paper_metadata)
+        store.add_cir(cir)
+        papers_added += 1
+
         for claim in cir.get("claims") or []:
             # Defensive: _canonicalise_claim_ids should already have set
             # this, but force it for CIRs that ship with no claims and
@@ -362,16 +403,6 @@ def seed_store_cmd(
         for ann in cir.get("annotations") or []:
             store.add_annotation(ann)
             annotations_added += 1
-
-        src_path = _sibling_source(cir_path)
-        if src_path is not None:
-            store.save_source(paper_id, src_path.read_bytes())
-            sources_added += 1
-
-        pdf_path = _sibling_pdf(cir_path)
-        if pdf_path is not None:
-            store.save_rendered_pdf(paper_id, pdf_path.read_bytes())
-            pdfs_added += 1
 
         if not quiet:
             typer.echo(

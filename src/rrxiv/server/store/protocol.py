@@ -157,6 +157,18 @@ class Store(Protocol):
     """Record a request and return the count in the current 60-second
     sliding window."""
 
+    # ----- Corpus management -----
+    def clear_corpus(self) -> None: ...
+    """Drop every paper, CIR, claim, annotation, source archive, and
+    rendered PDF. Used by ``rrxiv seed-store --reset`` to wipe stale
+    rows before re-seeding so a paper whose claim IDs changed prefix
+    (e.g. parser meta-slug → canonical UUID) no longer leaves orphans.
+
+    Does NOT touch tokens, agents, challenges, snapshots, or rate
+    limiting state — those are operational/auth concerns separate
+    from the read corpus.
+    """
+
 
 @dataclass(slots=True)
 class StoreState:
