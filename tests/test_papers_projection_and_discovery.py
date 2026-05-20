@@ -351,15 +351,26 @@ def test_discovery_stats_by_status() -> None:
 def test_claims_top_endpoint() -> None:
     app, transport = _build_app_and_transport()
     app.state.store.add_paper(_paper("p1"))
+    # c1 is depended on by c2 + c3; should rank above c4 (no incoming edges).
     app.state.store.add_claim(_claim("p1:c1", "p1"))
-    app.state.store.add_claim(_claim("p1:c2", "p1"))
+    c2 = _claim("p1:c2", "p1")
+    c2["depends_on"] = ["p1:c1"]
+    c3 = _claim("p1:c3", "p1")
+    c3["depends_on"] = ["p1:c1"]
+    app.state.store.add_claim(c2)
+    app.state.store.add_claim(c3)
+    app.state.store.add_claim(_claim("p1:c4", "p1"))
     with httpx.Client(transport=transport, base_url="http://test/api/v0") as c:
         resp = c.get("/claims/top", params={"limit": 5})
     assert resp.status_code == 200
     items = resp.json()["items"]
-    assert len(items) == 2
+    assert len(items) == 4
     for item in items:
-        assert {"id", "statement", "queries"} <= item.keys()
+        # ``queries`` retained as backward-compat alias of dependents_count.
+        assert {"id", "statement", "queries", "dependents_count"} <= item.keys()
+    # c1 has 2 dependents → must rank first.
+    assert items[0]["id"] == "p1:c1"
+    assert items[0]["dependents_count"] == 2
 
 
 def test_search_papers_returns_list_item_shape() -> None:

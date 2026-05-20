@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
@@ -38,36 +37,58 @@ def list_top_claims(
     request: Request,
     limit: int = Query(5, ge=1, le=50),
 ) -> dict[str, Any]:
-    """Top-N claims by replication interest.
+    """Top-N claims by graph influence.
 
-    v0.1 ranking: ``replications + 0.5 * len(supports)``. The ``queries``
-    field on each item is a deterministic stub (hash-of-id mod 4000) until
-    real query telemetry lands. The shape matches what the web client's
-    home page consumes.
+    v0.1 ranking: ``dependents_count + replications + 0.5 * len(supports)``.
+
+    - ``dependents_count`` is the number of other claims that declare
+      ``depends_on: <this_claim_id>`` in the corpus. This is the
+      structural answer to "which claims is everything else built on?"
+      For Euclid, that surfaces I.4 (SAS), I.5, II.5, I.47, etc. — the
+      foundational propositions other proofs lean on.
+    - ``replications`` and ``supports`` are local-to-the-claim signals
+      that tilt the ranking toward claims with attestation as well as
+      structural use.
+
+    The ``queries`` field on each item is also returned for backward
+    compatibility with v0.1 web clients but is now the same as
+    ``dependents_count`` — no longer a hash stub. When real
+    request-telemetry lands (Plausible + per-claim event tracking,
+    RRP-TBD) ``queries`` becomes a true count and ``dependents_count``
+    stays a separate field.
     """
     store: Store = get_store(request)
-    ranked: list[tuple[float, dict[str, Any]]] = []
+    # Precompute incoming-edge counts in one pass.
+    dependents: dict[str, int] = {}
     for claim in store.list_claims():
+        for target in claim.get("depends_on") or []:
+            tid = str(target)
+            dependents[tid] = dependents.get(tid, 0) + 1
+
+    ranked: list[tuple[float, int, dict[str, Any]]] = []
+    for claim in store.list_claims():
+        cid = str(claim.get("id"))
         replications = len(claim.get("replications") or []) if isinstance(
             claim.get("replications"), list
         ) else int(claim.get("replications") or 0)
         supports = len(claim.get("supports") or [])
-        score = float(replications) + 0.5 * float(supports)
-        ranked.append((score, claim))
-    ranked.sort(key=lambda pair: pair[0], reverse=True)
+        d = dependents.get(cid, 0)
+        score = float(d) + float(replications) + 0.5 * float(supports)
+        ranked.append((score, d, claim))
+    ranked.sort(key=lambda triple: triple[0], reverse=True)
 
     items: list[dict[str, Any]] = []
-    for _, claim in ranked[:limit]:
+    for _score, dep_count, claim in ranked[:limit]:
         cid = str(claim.get("id"))
-        # Deterministic stub: hash-of-id mod 4000 gives a stable
-        # "queries" number across requests. Real telemetry replaces this.
-        digest = hashlib.sha256(cid.encode("utf-8")).digest()
-        queries = (int.from_bytes(digest[:4], "big") % 4000) + 50
         items.append(
             {
                 "id": cid,
                 "statement": claim.get("statement", ""),
-                "queries": queries,
+                "dependents_count": dep_count,
+                # Backward-compat alias for v0.1 web clients that still
+                # read ``queries``. Drops once everyone reads
+                # ``dependents_count`` directly.
+                "queries": dep_count,
             }
         )
     return {"items": items, "next_cursor": None}
