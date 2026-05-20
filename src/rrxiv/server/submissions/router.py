@@ -217,6 +217,8 @@ def get_paper_source_manifest(paper_id: str, request: Request) -> dict[str, Any]
             for member in tar.getmembers():
                 if not member.isfile():
                     continue
+                if _is_noise_file(member.name):
+                    continue
                 files.append(
                     {
                         "path": member.name,
@@ -314,6 +316,22 @@ def _classify_source_file(path: str) -> str:
         if lower.endswith(ext):
             return kind
     return "other"
+
+
+def _is_noise_file(path: str) -> bool:
+    """Filter macOS apple-double / Spotlight / git noise from listings.
+
+    The tarball produced on macOS by ``tar -czf`` includes ``._foo`` and
+    ``.DS_Store`` siblings; they're never useful to readers.
+    """
+    base = path.rsplit("/", 1)[-1]
+    if base.startswith("._"):
+        return True
+    if base in {".DS_Store", "Thumbs.db", ".gitkeep"}:
+        return True
+    if "/__MACOSX/" in f"/{path}/":
+        return True
+    return False
 
 
 def _source_sort_key(path: str) -> int:

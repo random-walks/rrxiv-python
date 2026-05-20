@@ -87,42 +87,19 @@ def serve(
                 fg=typer.colors.YELLOW,
             )
         else:
-            import json
-
-            from rrxiv.cli.seed import _iter_cir_files, _sibling_pdf, _sibling_source
-            from rrxiv.server.papers.slug import is_slug, mint_slug
+            # Delegate to the shared loader so this path gets the
+            # same source.uri / rendered_pdf_uri rewriting and edge
+            # canonicalisation that ``rrxiv seed-store`` does.
+            from rrxiv.cli.seed import _iter_cir_files, load_cir_into_store
 
             files = _iter_cir_files(seed_dir)
             seeded_papers = 0
             for cir_path in files:
-                with cir_path.open("r", encoding="utf-8") as fh:
-                    cir = json.load(fh)
-                paper_id = cir.get("id")
-                if not paper_id:
-                    continue
-                if not cir.get("id_slug"):
-                    cir["id_slug"] = mint_slug(app.state.store)
-                elif not is_slug(cir["id_slug"]):
-                    pass  # malformed; let validation catch it later
-                paper_metadata = {
-                    k: v
-                    for k, v in cir.items()
-                    if k not in ("claims", "citations", "annotations", "sections", "figures")
-                }
-                app.state.store.add_paper(paper_metadata)
-                app.state.store.add_cir(cir)
-                seeded_papers += 1
-                for c in cir.get("claims") or []:
-                    c.setdefault("paper_id", paper_id)
-                    app.state.store.add_claim(c)
-                for a in cir.get("annotations") or []:
-                    app.state.store.add_annotation(a)
-                src = _sibling_source(cir_path)
-                if src is not None:
-                    app.state.store.save_source(paper_id, src.read_bytes())
-                pdf = _sibling_pdf(cir_path)
-                if pdf is not None:
-                    app.state.store.save_rendered_pdf(paper_id, pdf.read_bytes())
+                result = load_cir_into_store(
+                    cir_path, app.state.store, quiet=True
+                )
+                if result is not None:
+                    seeded_papers += 1
             typer.secho(
                 f"Seeded {seeded_papers} paper(s) from {seed_dir}.",
                 fg=typer.colors.GREEN,
