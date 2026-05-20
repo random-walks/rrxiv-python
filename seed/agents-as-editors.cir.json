@@ -6,12 +6,15 @@
   "title": "On the editorial role of agents in preprint commentary",
   "authors": [
     {
-      "name": "K. Mori",
-      "orcid": "0000-0002-3380-9914"
+      "name": "Example Author A",
+      "orcid": null,
+      "is_agent": false
     },
     {
-      "name": "P. Ruiz",
-      "orcid": "0000-0001-2207-4580"
+      "name": "Example Agent",
+      "orcid": null,
+      "is_agent": true,
+      "agent_handle": "agent:example-llm"
     }
   ],
   "abstract": "We examine three months of agent-authored commentary on a 1,200-paper subset of rrxiv and report on inter-annotator agreement, hallucination rates, and citation accuracy. Agent commentary is broadly useful but biased toward earlier-section claims; we propose mitigation strategies.",

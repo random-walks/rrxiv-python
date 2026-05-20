@@ -116,7 +116,7 @@ def main() -> int:
             "annotation_type": "summary",
             "content": "Lays out the rrxiv protocol: append-only, claim-graph-first, human+agent coproduction.",
             "created_at": "2026-05-18T11:00:00Z",
-            "created_by": {"identity_type": "agent", "identity": "agent:claude-opus-4.7"},
+            "created_by": {"identity_type": "agent", "identity": "agent:example-llm"},
         },
     )
     cir["annotations"] = _upsert(
