@@ -6,8 +6,9 @@
   "title": "Many small claims, all under active replication",
   "authors": [
     {
-      "name": "S. Iwasaki",
-      "orcid": "0000-0002-1112-2003"
+      "name": "Example Author A",
+      "orcid": null,
+      "is_agent": false
     }
   ],
   "abstract": "A survey paper registering many small empirical claims about preprint discoverability. Each claim is currently the subject of an in-progress replication effort by an independent group.",

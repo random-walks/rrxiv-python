@@ -6,8 +6,9 @@
   "title": "A negative result on shrinkage estimators in small-N replication",
   "authors": [
     {
-      "name": "L. Okafor",
-      "orcid": "0000-0002-6712-1185"
+      "name": "Example Author A",
+      "orcid": null,
+      "is_agent": false
     }
   ],
   "abstract": "We attempt to replicate the shrinkage-estimator results of [Brown 2021] under small-N conditions and report a negative finding. Our analysis identifies two likely sources of the original effect: data leakage in the holdout split and a misspecified prior. We release replication code and a corrected reanalysis.",

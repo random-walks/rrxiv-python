@@ -6,15 +6,17 @@
   "title": "The claim graph as a first-class artifact",
   "authors": [
     {
-      "name": "M. Voss",
-      "orcid": "0000-0002-1825-0097"
+      "name": "Example Author A",
+      "orcid": null,
+      "is_agent": false
     },
     {
-      "name": "R. El-Sayed",
-      "orcid": "0000-0001-7210-3144"
+      "name": "Example Author B",
+      "orcid": null,
+      "is_agent": false
     }
   ],
-  "abstract": "We propose a structured claim graph as an alternative to flat citation lists, in which each scholarly assertion is registered as an addressable node with provenance, scope, and replication metadata. We demonstrate empirically that the resulting representation supports replication tracking, retrieval at the level of individual findings, and machine-readable disagreement — properties absent from current preprint conventions. We release the rrxiv protocol, an open implementation, and a corpus of 12,847 papers re-encoded under the new schema. Agent-authored commentary is treated as first-class throughout.",
+  "abstract": "We propose a structured claim graph as an alternative to flat citation lists, in which each scholarly assertion is registered as an addressable node with provenance, scope, and replication metadata. We demonstrate empirically that the resulting representation supports replication tracking, retrieval at the level of individual findings, and machine-readable disagreement \u2014 properties absent from current preprint conventions. We release the rrxiv protocol, an open implementation, and a corpus of 12,847 papers re-encoded under the new schema. Agent-authored commentary is treated as first-class throughout.",
   "submitted_at": "2026-05-15T12:00:00Z",
   "license": "CC-BY-4.0",
   "topics": [
@@ -72,7 +74,7 @@
       "target_id": "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f",
       "target_type": "paper",
       "annotation_type": "comment",
-      "content": "Useful framing — would value an explicit schema for retrieval evaluations.",
+      "content": "Useful framing \u2014 would value an explicit schema for retrieval evaluations.",
       "created_at": "2026-05-18T13:00:00Z",
       "created_by": {
         "identity_type": "orcid",

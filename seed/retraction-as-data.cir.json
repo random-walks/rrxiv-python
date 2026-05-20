@@ -6,12 +6,14 @@
   "title": "Retraction notices as first-class data",
   "authors": [
     {
-      "name": "H. Andersen",
-      "orcid": "0000-0002-5641-3019"
+      "name": "Example Author A",
+      "orcid": null,
+      "is_agent": false
     },
     {
-      "name": "C. Park",
-      "orcid": "0000-0001-7843-2208"
+      "name": "Example Author B",
+      "orcid": null,
+      "is_agent": false
     }
   ],
   "abstract": "Most preprint servers handle retractions as freeform text. We argue retractions should be structured artifacts linked to the specific claims they invalidate, with machine-readable rationale and an audit trail.",

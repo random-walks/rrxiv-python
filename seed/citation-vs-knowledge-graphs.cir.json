@@ -6,8 +6,9 @@
   "title": "Citation graphs are not knowledge graphs",
   "authors": [
     {
-      "name": "J. Bauer",
-      "orcid": "0000-0002-7193-0042"
+      "name": "Example Author A",
+      "orcid": null,
+      "is_agent": false
     }
   ],
   "abstract": "An opinion piece distinguishing the structural commitments of citation networks from those of knowledge graphs proper, with implications for preprint infrastructure. We argue that conflating the two has produced a decade of misnamed retrieval systems.",
@@ -42,7 +43,7 @@
       "target_id": "01923f8e-0006-7c4d-9e1f-3a2b1c0d4e5f",
       "target_type": "paper",
       "annotation_type": "comment",
-      "content": "The taxonomy in §3 maps cleanly onto the rrxiv claim graph.",
+      "content": "The taxonomy in \u00a73 maps cleanly onto the rrxiv claim graph.",
       "created_at": "2026-05-18T15:30:00Z",
       "created_by": {
         "identity_type": "orcid",
@@ -54,7 +55,7 @@
     {
       "id": "01923f8e-0006-7c4d-9e1f-3a2b1c0d4e5f:c1",
       "paper_id": "01923f8e-0006-7c4d-9e1f-3a2b1c0d4e5f",
-      "statement": "Citation networks encode 'this work cited that work' edges; knowledge graphs encode typed semantic relations — the two are not interchangeable.",
+      "statement": "Citation networks encode 'this work cited that work' edges; knowledge graphs encode typed semantic relations \u2014 the two are not interchangeable.",
       "claim_type": "definitional",
       "evidence_type": "definition",
       "extracted_by": "author",

@@ -7,19 +7,22 @@
   "title": "Reproducibility budgets for ML preprints",
   "authors": [
     {
-      "name": "A. Tanaka",
-      "orcid": "0000-0003-2104-9921"
+      "name": "Example Author A",
+      "orcid": null,
+      "is_agent": false
     },
     {
-      "name": "S. Park",
-      "orcid": "0000-0002-4416-7780"
+      "name": "Example Author B",
+      "orcid": null,
+      "is_agent": false
     },
     {
-      "name": "D. Williams",
-      "orcid": "0000-0001-9384-2210"
+      "name": "Example Author C",
+      "orcid": null,
+      "is_agent": false
     }
   ],
-  "abstract": "We argue that preprint platforms should require authors to declare a reproducibility budget at submission time — an explicit specification of the compute, data, and human-time required to replicate the paper's central claims. We evaluate adoption costs over 12 months and report mixed results: smaller labs benefit, large labs resist.",
+  "abstract": "We argue that preprint platforms should require authors to declare a reproducibility budget at submission time \u2014 an explicit specification of the compute, data, and human-time required to replicate the paper's central claims. We evaluate adoption costs over 12 months and report mixed results: smaller labs benefit, large labs resist.",
   "submitted_at": "2026-05-12T09:30:00Z",
   "license": "CC-BY-4.0",
   "topics": [
