@@ -12,47 +12,75 @@
 \begin{document}
 \maketitle
 
+\begin{center}
+\small\itshape
+Demonstration paper in the rrxiv reference corpus. The canonical machine-readable version lives at \href{https://rrxiv.com/papers/rrxiv:2605.00008}{rrxiv.com/papers/rrxiv:2605.00008}.
+\end{center}
+
 \begin{abstract}
 A survey paper registering many small empirical claims about preprint discoverability. Each claim is currently the subject of an in-progress replication effort by an independent group.
 \end{abstract}
 
-\section{Claims}
+\section{Introduction}
+A survey paper registering many small empirical claims about preprint discoverability. Each claim is currently the subject of an in-progress replication effort by an independent group.
+
+This document is a structured encoding of the paper in the \texttt{rrxiv} protocol's Canonical Intermediate Representation (CIR). It engages with the topics \texttt{cs.DL} and \texttt{cs.IR}. The encoding registers 5 formal claims (5 untested). Each claim is annotated with its claim type, evidence type, and current replication status; dependency edges between claims, when present, form a machine-readable proof DAG.
+
+\section{Methodology}
+We follow the \texttt{rrxiv} convention of separating \emph{claims} (the proposition under consideration) from \emph{evidence} (the argument or data supporting it). Each claim in the results section below is presented with its statement, the type of evidence appealed to, and a brief discussion of replication status. Where claims depend on prior results --- internal or external --- the dependency is recorded in the CIR as a \texttt{\textbackslash dependson} edge, so the full inferential structure is machine-traversable. Citations of external work appear in the References section at the end of this document.
+
+\section{Results: registered claims}
+\subsection*{Claim 1}
 \begin{claim}[Claim 1]
 \label{claim:c1}
 Preprint titles longer than 12 words receive 18\% less cross-domain attention.
 
 \emph{Replication status: untested.}
 \end{claim}
+This claim is an empirical observation supported by data. As of the encoding date, it has not yet been independently tested.
 
+\subsection*{Claim 2}
 \begin{claim}[Claim 2]
 \label{claim:c2}
 Adding a structured abstract correlates with 22\% higher click-through from search.
 
 \emph{Replication status: untested.}
 \end{claim}
+This claim is an empirical observation supported by data. As of the encoding date, it has not yet been independently tested.
 
+\subsection*{Claim 3}
 \begin{claim}[Claim 3]
 \label{claim:c3}
 Domain-experts cite within their own subfield 4x more than cross-domain.
 
 \emph{Replication status: untested.}
 \end{claim}
+This claim is an empirical observation supported by data. As of the encoding date, it has not yet been independently tested.
 
+\subsection*{Claim 4}
 \begin{claim}[Claim 4]
 \label{claim:c4}
 Section-level retrieval beats whole-paper retrieval on recall@5 for narrow queries.
 
 \emph{Replication status: untested.}
 \end{claim}
+This claim is an empirical observation supported by data. As of the encoding date, it has not yet been independently tested.
 
+\subsection*{Claim 5}
 \begin{claim}[Claim 5]
 \label{claim:c5}
 The reproducibility-budget signal is stable across three independent reannotation rounds.
 
 \emph{Replication status: untested.}
 \end{claim}
+This claim is an empirical observation supported by data. As of the encoding date, it has not yet been independently tested.
 
-\section{Notes}
-This document is a synthetic render of the canonical CIR for demonstration purposes. The full source, claim graph, and discussion live in the rrxiv reference instance. See the \texttt{rrxiv} protocol repository for the schema.
+\section{Discussion}
+The claim graph above is the primary product of this paper. By making every claim independently citable --- and by recording its dependencies, evidence type, and current replication status as structured fields --- the paper participates in the rrxiv reproducibility-first corpus. Subsequent papers in this instance may extend, contradict, or replicate individual claims here without forcing a rewrite of the entire document. See the canonical version online for the live discourse layer.
 
+\section{References}
+\begin{itemize}[leftmargin=*]
+\item Discoverability metrics for preprints
+\item Cross-domain attention in scholarly networks
+\end{itemize}
 \end{document}

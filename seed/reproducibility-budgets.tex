@@ -12,33 +12,57 @@
 \begin{document}
 \maketitle
 
+\begin{center}
+\small\itshape
+Demonstration paper in the rrxiv reference corpus. The canonical machine-readable version lives at \href{https://rrxiv.com/papers/rrxiv:2605.00003}{rrxiv.com/papers/rrxiv:2605.00003}.
+\end{center}
+
 \begin{abstract}
 We argue that preprint platforms should require authors to declare a reproducibility budget at submission time — an explicit specification of the compute, data, and human-time required to replicate the paper's central claims. We evaluate adoption costs over 12 months and report mixed results: smaller labs benefit, large labs resist.
 \end{abstract}
 
-\section{Claims}
+\section{Introduction}
+We argue that preprint platforms should require authors to declare a reproducibility budget at submission time — an explicit specification of the compute, data, and human-time required to replicate the paper's central claims. We evaluate adoption costs over 12 months and report mixed results: smaller labs benefit, large labs resist.
+
+This document is a structured encoding of the paper in the \texttt{rrxiv} protocol's Canonical Intermediate Representation (CIR). It engages with the topics \texttt{stat.ML} and \texttt{cs.LG}. The encoding registers 3 formal claims (1 contradicted, 1 partial, 1 replicated). Each claim is annotated with its claim type, evidence type, and current replication status; dependency edges between claims, when present, form a machine-readable proof DAG.
+
+\section{Methodology}
+We follow the \texttt{rrxiv} convention of separating \emph{claims} (the proposition under consideration) from \emph{evidence} (the argument or data supporting it). Each claim in the results section below is presented with its statement, the type of evidence appealed to, and a brief discussion of replication status. Where claims depend on prior results --- internal or external --- the dependency is recorded in the CIR as a \texttt{\textbackslash dependson} edge, so the full inferential structure is machine-traversable. Citations of external work appear in the References section at the end of this document.
+
+\section{Results: registered claims}
+\subsection*{Claim 1}
 \begin{claim}[Claim 1]
 \label{claim:c1}
 Reproducibility-budget declarations correlate with 2.3x higher replication success rates (p \textless{} 0.05).
 
 \emph{Replication status: replicated.}
 \end{claim}
+This claim is an empirical observation supported by data. As of the encoding date, it has been independently replicated.
 
+\subsection*{Claim 2}
 \begin{claim}[Claim 2]
 \label{claim:c2}
 Mandatory budget declarations reduce submission volume by 15\% in the first quarter.
 
 \emph{Replication status: contradicted.}
 \end{claim}
+This claim is an empirical observation supported by data. As of the encoding date, it has been contradicted by subsequent work.
 
+\subsection*{Claim 3}
 \begin{claim}[Claim 3]
 \label{claim:c3}
 Budgets self-correct via community feedback over a 6-month window.
 
 \emph{Replication status: partial.}
 \end{claim}
+This claim is an empirical observation supported by data.
 
-\section{Notes}
-This document is a synthetic render of the canonical CIR for demonstration purposes. The full source, claim graph, and discussion live in the rrxiv reference instance. See the \texttt{rrxiv} protocol repository for the schema.
+\section{Discussion}
+The claim graph above is the primary product of this paper. By making every claim independently citable --- and by recording its dependencies, evidence type, and current replication status as structured fields --- the paper participates in the rrxiv reproducibility-first corpus. Subsequent papers in this instance may extend, contradict, or replicate individual claims here without forcing a rewrite of the entire document. See the canonical version online for the live discourse layer.
 
+\section{References}
+\begin{itemize}[leftmargin=*]
+\item Computational reproducibility at scale
+\item Reproducibility in machine learning
+\end{itemize}
 \end{document}
