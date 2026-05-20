@@ -29,6 +29,14 @@ from pathlib import Path
 
 _MARK_START_RE = re.compile(r"^% \[flatten-tex\.py\] inlined: (.+?)\s*$")
 _MARK_END_RE = re.compile(r"^% \[flatten-tex\.py\] end: (.+?)\s*$")
+# flatten-tex.py inserts a `MISSING: <path>` comment line BEFORE any
+# \input{<path>} it couldn't resolve from disk. The original-source had
+# no equivalent line, so the SourceMap must skip these lines when
+# computing orig_line counts (otherwise everything after a MISSING line
+# is shifted by +1 per insertion).
+_MARK_MISSING_RE = re.compile(r"^\s*% \[flatten-tex\.py\] MISSING:")
+# Likewise the cycle marker.
+_MARK_CYCLE_RE = re.compile(r"^\s*% \[flatten-tex\.py\] cycle skipped:")
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +70,7 @@ class SourceMap:
         default_file: str,
         regions: list[_Region],
         line_starts: list[int],
+        synthetic_lines: list[int],
     ) -> None:
         self._text = flat_text
         self._default_file = default_file
@@ -69,6 +78,10 @@ class SourceMap:
         # Byte offset of the start of each 1-indexed line in flat_text.
         # ``_line_starts[k]`` is the offset of line k+1.
         self._line_starts = line_starts
+        # 1-indexed flat lines that flatten-tex injected and have no
+        # corresponding line in the original source (MISSING / cycle
+        # markers). The mapping subtracts these when computing orig_line.
+        self._synthetic_lines = sorted(synthetic_lines)
 
     @classmethod
     def from_flat_text(cls, flat_text: str, *, default_file: str) -> SourceMap:
@@ -89,6 +102,13 @@ class SourceMap:
         # is fine — locate() bounds-checks).
 
         regions: list[_Region] = []
+        # synthetic_lines tracks lines that flatten-tex inserted with no
+        # original-source equivalent (MISSING / cycle markers, and nested
+        # inlined/end markers when they appear inside another inlining
+        # region). The outer-most inlining marker on its own is not
+        # synthetic for the formula below (it's the anchor; the `-1` in
+        # the orig_line computation accounts for it).
+        synthetic_lines: list[int] = []
         # Stack-based scan: when an `inlined` marker opens a region, push
         # the file + flat line; when the matching `end` closes it, pop
         # and emit a Region. Inlined regions can nest (book that itself
@@ -100,10 +120,19 @@ class SourceMap:
         for idx, line in enumerate(lines, start=1):
             m_start = _MARK_START_RE.match(line)
             if m_start:
+                # A nested inlining marker counts as synthetic for the
+                # outer file; the inner file's own anchor still uses
+                # the `-1` adjustment, so we don't double-count from
+                # within the inner region's POV.
+                if stack:
+                    synthetic_lines.append(idx)
                 stack.append((m_start.group(1), idx, 1))
                 continue
             m_end = _MARK_END_RE.match(line)
             if m_end:
+                # `end` markers are always synthetic to the enclosing
+                # region — they have no original-source equivalent.
+                synthetic_lines.append(idx)
                 if stack:
                     file_open, flat_open, orig_open = stack[-1]
                     if file_open == m_end.group(1):
@@ -118,6 +147,9 @@ class SourceMap:
                         stack.pop()
                 # Unmatched end markers are ignored. They shouldn't
                 # occur if the input came out of flatten-tex.
+                continue
+            if _MARK_MISSING_RE.match(line) or _MARK_CYCLE_RE.match(line):
+                synthetic_lines.append(idx)
                 continue
 
         # Stack non-empty at EOF: orphaned `inlined` with no closing
@@ -143,6 +175,7 @@ class SourceMap:
             default_file=default_file,
             regions=regions,
             line_starts=line_starts,
+            synthetic_lines=synthetic_lines,
         )
 
     @classmethod
@@ -173,6 +206,22 @@ class SourceMap:
                 hi = mid - 1
         return lo + 1
 
+    def _synthetic_between(self, lo: int, hi: int) -> int:
+        """Count synthetic flat lines (markers / MISSING / cycle) in the
+        range ``(lo, hi]`` — i.e. strictly after ``lo``, up to and
+        including ``hi``. Used to discount inserted lines when mapping
+        flat → original line numbers.
+        """
+        if hi <= lo or not self._synthetic_lines:
+            return 0
+        count = 0
+        for ln in self._synthetic_lines:
+            if lo < ln <= hi:
+                count += 1
+            elif ln > hi:
+                break
+        return count
+
     def locate(self, offset: int) -> tuple[str, int]:
         """Return ``(file, line)`` for a flat-source byte offset.
 
@@ -197,7 +246,13 @@ class SourceMap:
         # Lines inside the region are 1-indexed against the *original*
         # file. flatten-tex emits the inlined marker on its own line,
         # then the original-file content starting on the next line.
-        # So flat_line == match.flat_start_line + k  means original
+        # So in the absence of MISSING/cycle markers,
+        # flat_line == match.flat_start_line + k means original
         # line == match.orig_start_line + k - 1.
-        orig_line = match.orig_start_line + (flat_line - match.flat_start_line - 1)
+        # MISSING/cycle/nested-end markers are synthetic (no source
+        # equivalent) and must be additionally subtracted so the
+        # original-file line lines up.
+        synthetic_inside = self._synthetic_between(match.flat_start_line, flat_line)
+        adjusted_delta = (flat_line - match.flat_start_line - 1) - synthetic_inside
+        orig_line = match.orig_start_line + adjusted_delta
         return match.file, max(1, orig_line)

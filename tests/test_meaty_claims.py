@@ -137,11 +137,11 @@ def test_meaty_multi_source_location_maps_to_chapter(
     assert sl.file == "chapters/chapter01.tex"
     # \begin{claim} is at line 11 in chapter01.tex.
     assert sl.line_start == 11
-    # \end{evidence} is at line 22 in chapter01.tex; flatten-tex inserts
-    # one extra "% MISSING:" line for the unresolved figure path
-    # (chapter01.tex \input{figures/...} resolves relative to chapter01,
-    # not main), shifting the end mapping by 1 line. Allow either.
-    assert sl.line_end in (22, 23)
+    # \end{evidence} is at line 22 in chapter01.tex. The SourceMap
+    # discounts flatten-tex's MISSING/cycle marker lines from the
+    # mapping so the original-file line is exact (no off-by-one even
+    # when flatten-tex couldn't resolve an \input).
+    assert sl.line_end == 22
 
 
 def test_meaty_multi_proof_clean(meaty_multi_cir: CIR) -> None:
@@ -256,3 +256,29 @@ def test_source_map_unmatched_end_ignored() -> None:
     smap = SourceMap.from_flat_text(text, default_file="main.tex")
     file, _ = smap.locate(0)
     assert file == "main.tex"
+
+
+def test_source_map_discounts_missing_markers() -> None:
+    """A flatten-tex MISSING comment is synthetic and must not shift the
+    original-file line count."""
+    text = (
+        "% [flatten-tex.py] inlined: chapters/c.tex\n"  # flat 1, anchor
+        "line one\n"  # flat 2 == c.tex line 1
+        "% [flatten-tex.py] MISSING: figures/foo\n"  # flat 3, synthetic
+        "\\input{figures/foo}\n"  # flat 4 == c.tex line 2
+        "line three\n"  # flat 5 == c.tex line 3
+        "% [flatten-tex.py] end: chapters/c.tex\n"
+    )
+    smap = SourceMap.from_flat_text(text, default_file="main.tex")
+    # Offset of "\input{figures/foo}".
+    input_offset = text.index("\\input")
+    file, line = smap.locate(input_offset)
+    assert file == "chapters/c.tex"
+    # Original line is 2 (line one is line 1, \input is line 2);
+    # without MISSING discounting the mapping would report 3.
+    assert line == 2
+    # Likewise, "line three" is original line 3.
+    line_three_offset = text.index("line three")
+    file, line = smap.locate(line_three_offset)
+    assert file == "chapters/c.tex"
+    assert line == 3
