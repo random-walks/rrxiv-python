@@ -1,0 +1,57 @@
+% main.tex — multi-file fixture exercising flatten-tex source mapping.
+%
+% Build pipeline:
+%   1. flatten-tex.py main.tex --out main-flat.tex
+%   2. (compile with tectonic to produce main-flat.rrxiv.aux — for this
+%      test we ship a pre-baked sidecar so the suite doesn't need a
+%      LaTeX install)
+%   3. rrxiv parse main-flat.tex
+%
+% The parser must report source_location.file == "chapters/chapter01.tex"
+% (the original-file relative path) for the claim defined inside that
+% input, not "main-flat.tex".
+
+\documentclass{rrxiv}
+
+\rrxivid{rrxiv-meaty-multifile}
+\rrxivversion{v1}
+\rrxivprotocolversion{0.2.0}
+\rrxivlicense{CC-BY-4.0}
+
+\title{Multi-file meaty-claim fixture}
+\author{rrxiv Project}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A fixture for multi-file source mapping via flatten-tex markers.
+\end{abstract}
+
+% [flatten-tex.py] inlined: chapters/chapter01.tex
+% chapter01.tex — chapter for the multi-file meaty-claim fixture.
+%
+% The claim and its paired evidence both live in this file; after
+% flatten-tex inlines them into main.tex, the parser's SourceMap must
+% map the flat-source positions back to this filename and to the
+% original-file line numbers.
+
+\section{The first chapter}
+\label{sec:ch1}
+
+\begin{claim}[Proposition: the squares stack]
+\label{prop:stack}
+The squares of consecutive integers differ by an odd number.
+\end{claim}
+
+\begin{evidence}[Proof of stack]
+\label{ev:stack}
+% [flatten-tex.py] MISSING: figures/fig-stack
+\input{figures/fig-stack}
+For any integer $n$, the identity $(n+1)^2 - n^2 = 2n + 1$ holds.
+Since $2n + 1$ is odd for any integer $n$, the difference is odd.
+\dependson{stack}{post:arith}
+\end{evidence}
+% [flatten-tex.py] end: chapters/chapter01.tex
+
+\end{document}

@@ -2,9 +2,9 @@
 
 Synced from: /Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv-python/../rrxiv/schema
 Source repo: /Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv
-Branch:      proposals/cli-sigs-server
-Commit:      afdfb947318dfa6f0e9201bf610d89063ec20f1c
-Synced at:   2026-05-18T23:59:38Z
+Branch:      feat/meaty-claims-schema
+Commit:      b50311d09f0dd9fe0114a552b9f4313bde8cb10d
+Synced at:   2026-05-20T22:42:05Z
 
 Files:
   - annotation.schema.json

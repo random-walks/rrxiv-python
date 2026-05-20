@@ -25,6 +25,7 @@ from rrxiv.models._generated.cir_schema import (
 from rrxiv.models._generated.citation_schema import Citation
 from rrxiv.models._generated.claim_schema import (
     Claim,
+    ClaimFigure,
     ClaimType,
     Confidence,
     EvidenceType,
@@ -56,6 +57,7 @@ __all__ = [
     "Author",
     "Citation",
     "Claim",
+    "ClaimFigure",
     "ClaimType",
     "Confidence",
     "CreatedBy",
