@@ -67,6 +67,9 @@ select = ["E", "F", "I", "N", "UP", "B", "RUF"]
 # FastAPI's idiomatic Depends/Header use function calls in argument
 # defaults; ruff's B008 generally applies but is the wrong call here.
 "src/rrxiv/server/**/*.py" = ["B008"]
+# One-off curation scripts contain large embedded data strings where
+# 100-char wrapping hurts readability.
+"scripts/**/*.py" = ["E501"]
 
 [tool.mypy]
 strict = true

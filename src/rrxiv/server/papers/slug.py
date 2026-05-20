@@ -9,7 +9,7 @@ module owns the minting algorithm and the lookup-by-slug helper.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -26,10 +26,10 @@ def is_slug(s: str) -> bool:
 
 def slug_yymm(now: datetime | None = None) -> str:
     """Return the YYMM segment for the given (UTC) timestamp; default: now()."""
-    when = now or datetime.now(timezone.utc)
+    when = now or datetime.now(UTC)
     if when.tzinfo is None:
-        when = when.replace(tzinfo=timezone.utc)
-    when = when.astimezone(timezone.utc)
+        when = when.replace(tzinfo=UTC)
+    when = when.astimezone(UTC)
     return f"{when.year % 100:02d}{when.month:02d}"
 
 
