@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from rrxiv.server.store import Store
@@ -62,7 +62,7 @@ def mint_slug(store: Store, submitted_at: datetime | None = None) -> str:
     return f"rrxiv:{yymm}.{(max_counter + 1):05d}"
 
 
-def find_paper_by_slug(store: Store, slug: str) -> dict | None:
+def find_paper_by_slug(store: Store, slug: str) -> dict[str, Any] | None:
     """Linear scan for a paper with the given ``id_slug``.
 
     Default implementation suitable for any ``Store``. SQL-backed stores
