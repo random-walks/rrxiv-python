@@ -1,15 +1,19 @@
-# rrxiv reference server — production image
+# rrxiv reference server — example production image.
 #
 # Builds a single-process FastAPI app behind uvicorn, with SQLite as the
-# persistent store. The seed corpus is baked in at build time; first boot
-# initialises the database from /seed/ if it's empty.
+# persistent store. The bundled `seed/` corpus is baked into the image
+# as a starting point; first-boot seeds the database if it's empty.
 #
-# Target: Fly.io with a persistent volume mounted at /data.
-# Env vars set in fly.toml:
-#   RRXIV_STORE_URL=sqlite:////data/rrxiv.db
-#   RRXIV_API_BASE=https://api.rrxiv.org/api/v0
-#   RRXIV_DEV_MODE=0
-#   RRXIV_CORS_ORIGINS=https://rrxiv.org,https://www.rrxiv.org
+# Target: Fly.io with a persistent volume mounted at /data — but the
+# image is portable to any container host.
+#
+# This Dockerfile is a REFERENCE for parties wanting to run their own
+# rrxiv instance. The canonical instance at rrxiv.com is deployed from
+# a separate private repo (rrxiv-instance) that extends this image with
+# instance-specific seed data, paper-repo ingestion, and deploy config.
+# See `.env.example` in this repo for the env vars the server reads;
+# set them at deploy time via `fly secrets set …` or your platform's
+# equivalent.
 
 FROM python:3.12-slim
 

@@ -1,24 +1,31 @@
-# fly.toml — Fly.io deploy config for the rrxiv reference server.
+# fly.toml — example Fly.io deploy config for the rrxiv reference server.
 #
-# Create the app once (from outside this file):
-#   fly apps create rrxiv-api
+# This file is a REFERENCE; it points at a placeholder app name and
+# leaves instance-specific env vars empty. Copy + edit for your own
+# deployment, or use the canonical-instance overlay at
+# random-walks/rrxiv-instance (private) as a template.
+#
+# To stand up your own instance:
+#   fly apps create my-rrxiv-instance
 #   fly volumes create rrxiv_data --region iad --size 1
-#   fly secrets set RRXIV_ORCID_CLIENT_ID=... RRXIV_ORCID_CLIENT_SECRET=...
-#
-# Then on every deploy:
+#   fly secrets set \
+#     RRXIV_API_BASE=https://api.example.com/api/v0 \
+#     RRXIV_CORS_ORIGINS=https://example.com \
+#     RRXIV_ORCID_CLIENT_ID=APP-... \
+#     RRXIV_ORCID_CLIENT_SECRET=...
 #   fly deploy
 
-app = "rrxiv-api"
+app = "rrxiv-api-example"
 primary_region = "iad"
 
 [build]
   dockerfile = "Dockerfile"
 
 [env]
+  # Only non-instance-specific defaults live here. RRXIV_API_BASE,
+  # RRXIV_CORS_ORIGINS, and any OAuth secrets are set via `fly secrets`.
   RRXIV_STORE_URL = "sqlite:////data/rrxiv.db"
-  RRXIV_API_BASE = "https://api.rrxiv.org/api/v0"
   RRXIV_DEV_MODE = "0"
-  RRXIV_CORS_ORIGINS = "https://rrxiv.org,https://www.rrxiv.org"
   RRXIV_LOG_LEVEL = "info"
 
 [[mounts]]
