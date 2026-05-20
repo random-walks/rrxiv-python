@@ -1,0 +1,68 @@
+{
+  "rrxiv_version": "0.1.0",
+  "id": "01923f8e-0006-7c4d-9e1f-3a2b1c0d4e5f",
+  "id_slug": "rrxiv:2605.00006",
+  "version": "v1",
+  "title": "Citation graphs are not knowledge graphs",
+  "authors": [
+    {
+      "name": "J. Bauer",
+      "orcid": "0000-0002-7193-0042"
+    }
+  ],
+  "abstract": "An opinion piece distinguishing the structural commitments of citation networks from those of knowledge graphs proper, with implications for preprint infrastructure. We argue that conflating the two has produced a decade of misnamed retrieval systems.",
+  "submitted_at": "2026-05-17T11:00:00Z",
+  "license": "CC-BY-4.0",
+  "topics": [
+    "cs.DL"
+  ],
+  "source": {
+    "format": "latex",
+    "uri": "https://api.rrxiv.org/api/v0/papers/01923f8e-0006-7c4d-9e1f-3a2b1c0d4e5f/source"
+  },
+  "sections": [],
+  "figures": [],
+  "citations": [
+    {
+      "id": "cite-citknow-arxiv-1",
+      "kind": "arxiv",
+      "ref": "1804.09301",
+      "title": "Knowledge graphs from scientific abstracts"
+    },
+    {
+      "id": "cite-citknow-doi-1",
+      "kind": "doi",
+      "ref": "10.1162/qss_a_00112",
+      "title": "Citation networks vs knowledge graphs"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "ann-citknow-comment-1",
+      "target_id": "01923f8e-0006-7c4d-9e1f-3a2b1c0d4e5f",
+      "target_type": "paper",
+      "annotation_type": "comment",
+      "content": "The taxonomy in §3 maps cleanly onto the rrxiv claim graph.",
+      "created_at": "2026-05-18T15:30:00Z",
+      "created_by": {
+        "identity_type": "orcid",
+        "identity": "0000-0001-3333-4044"
+      }
+    }
+  ],
+  "claims": [
+    {
+      "id": "01923f8e-0006-7c4d-9e1f-3a2b1c0d4e5f:c1",
+      "paper_id": "01923f8e-0006-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "Citation networks encode 'this work cited that work' edges; knowledge graphs encode typed semantic relations — the two are not interchangeable.",
+      "claim_type": "definitional",
+      "evidence_type": "definition",
+      "extracted_by": "author",
+      "canonical": true,
+      "replication_status": "untested",
+      "depends_on": [
+        "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f:c1"
+      ]
+    }
+  ]
+}

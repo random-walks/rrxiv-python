@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rrxiv.com/schema/v0/paper_list_item.schema.json",
+  "title": "Paper list-item",
+  "description": "A Paper plus server-computed aggregate stats. Wire shape for GET /api/v0/papers and GET /api/v0/papers/{id}?include=stats. The canonical Paper is immutable; stats are derived from claims and annotations and change as the corpus evolves. See RRP-0012.",
+  "version": "0.1.0",
+  "type": "object",
+  "allOf": [{ "$ref": "paper.schema.json" }],
+  "required": ["stats"],
+  "properties": {
+    "stats": { "$ref": "#/$defs/Stats" }
+  },
+  "$defs": {
+    "Stats": {
+      "type": "object",
+      "required": ["claims", "replicated", "contradicted", "contested", "untested", "status", "computed_at"],
+      "properties": {
+        "claims": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total claims registered on this paper."
+        },
+        "replicated": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of claims with replication_status='replicated'."
+        },
+        "contradicted": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of claims with replication_status='contradicted'."
+        },
+        "contested": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of claims with replication_status='partial' (mixed evidence)."
+        },
+        "untested": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of claims with replication_status='untested' or unset."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["preprint", "untested", "replicated", "contested", "retracted"],
+          "description": "Paper-level rollup. 'preprint' = no annotations yet. 'untested' = annotations exist but no replications/contradictions. 'replicated' = replications without contradictions or partials. 'contested' = any mix of replications + non-replication evidence, or contradictions without replications. 'retracted' = paper has a retraction erratum."
+        },
+        "computed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this stats snapshot was computed. Servers SHOULD include; clients MUST treat as a hint, not a cache key."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "rrxiv_version": "0.1.0",
+      "id": "01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f",
+      "id_slug": "rrxiv:2605.00001",
+      "version": "v1",
+      "previous_version": null,
+      "title": "rrxiv: An open protocol for research preprints in the era of human-agent coproduction",
+      "authors": [
+        { "name": "Jane Doe", "orcid": "0000-0001-2345-6789", "affiliation": "ACME University" }
+      ],
+      "abstract": "We propose rrxiv, a protocol for research preprints that pairs immutable papers with a structured claim graph and a Wikipedia-style annotation layer.",
+      "submitted_at": "2026-05-04T12:00:00Z",
+      "license": "CC-BY-4.0",
+      "topics": ["infrastructure", "scientific-publishing"],
+      "source": {
+        "format": "latex",
+        "uri": "https://rrxiv.com/papers/01923f8e/v1/source.tar.gz",
+        "rendered_pdf_uri": "https://rrxiv.com/papers/01923f8e/v1/paper.pdf",
+        "compile_hash": "sha256:abc123..."
+      },
+      "stats": {
+        "claims": 7,
+        "replicated": 2,
+        "contradicted": 0,
+        "contested": 1,
+        "untested": 4,
+        "status": "contested",
+        "computed_at": "2026-05-18T14:00:00Z"
+      }
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "rrxiv_version": "0.1.0",
+  "id": "01923f8e-0007-7c4d-9e1f-3a2b1c0d4e5f",
+  "id_slug": "rrxiv:2605.00007",
+  "version": "v1",
+  "title": "Retraction notices as first-class data",
+  "authors": [
+    {
+      "name": "H. Andersen",
+      "orcid": "0000-0002-5641-3019"
+    },
+    {
+      "name": "C. Park",
+      "orcid": "0000-0001-7843-2208"
+    }
+  ],
+  "abstract": "Most preprint servers handle retractions as freeform text. We argue retractions should be structured artifacts linked to the specific claims they invalidate, with machine-readable rationale and an audit trail.",
+  "submitted_at": "2026-05-16T08:00:00Z",
+  "license": "CC-BY-4.0",
+  "topics": [
+    "cs.DL",
+    "cs.CY"
+  ],
+  "source": {
+    "format": "latex",
+    "uri": "https://api.rrxiv.org/api/v0/papers/01923f8e-0007-7c4d-9e1f-3a2b1c0d4e5f/source"
+  },
+  "sections": [],
+  "figures": [],
+  "citations": [
+    {
+      "id": "cite-retract-doi-1",
+      "kind": "doi",
+      "ref": "10.1126/science.abc1234",
+      "title": "The retraction record"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "ann-retract-erratum-1",
+      "target_id": "01923f8e-0007-7c4d-9e1f-3a2b1c0d4e5f",
+      "target_type": "paper",
+      "annotation_type": "erratum",
+      "content": "Demonstration retraction (seed corpus); the historical record is preserved as required by the protocol.",
+      "created_at": "2026-05-18T16:00:00Z",
+      "created_by": {
+        "identity_type": "orcid",
+        "identity": "0000-0002-7777-0001"
+      },
+      "structured_payload": {
+        "retracted": true,
+        "reason": "demonstration"
+      }
+    }
+  ],
+  "claims": [
+    {
+      "id": "01923f8e-0007-7c4d-9e1f-3a2b1c0d4e5f:c1",
+      "paper_id": "01923f8e-0007-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "Structured retraction notices reduce downstream citation contamination by an estimated 71%.",
+      "claim_type": "empirical",
+      "evidence_type": "simulation",
+      "extracted_by": "author",
+      "canonical": true,
+      "replication_status": "untested"
+    },
+    {
+      "id": "01923f8e-0007-7c4d-9e1f-3a2b1c0d4e5f:c2",
+      "paper_id": "01923f8e-0007-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "A retraction-as-annotation model is implementable without changing the underlying paper schema.",
+      "claim_type": "methodological",
+      "evidence_type": "argument",
+      "extracted_by": "author",
+      "canonical": true,
+      "replication_status": "untested"
+    }
+  ]
+}

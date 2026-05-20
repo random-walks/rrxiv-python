@@ -21,7 +21,7 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Query, Request
 from pydantic import BaseModel, ValidationError
 
 from rrxiv.server.deps import AuthedRequest, get_store, require_identity
@@ -32,6 +32,7 @@ from rrxiv.server.errors import (
     not_found,
     validation_error,
 )
+from rrxiv.server.pagination import paginate
 from rrxiv.server.store import (
     AnonymousIdentity,
     IdempotencyEntry,
@@ -50,9 +51,45 @@ _REQUIRES_NAMED_IDENTITY = require_identity(allow_anonymous=False)
 
 
 @router.get("")
-def list_annotations(request: Request) -> dict[str, Any]:
+def list_annotations(
+    request: Request,
+    target_id: str | None = Query(default=None, description="Filter to annotations on this paper or claim."),
+    target_type: str | None = Query(default=None, description="One of 'paper' or 'claim'."),
+    annotation_type: str | None = Query(
+        default=None,
+        description="Filter by annotation_type (replication/contradiction/erratum/comment/…).",
+    ),
+    created_by_identity_type: str | None = Query(
+        default=None,
+        alias="created_by_identity_type",
+        description="Filter by the identity_type of created_by (orcid/agent/anonymous).",
+    ),
+    cursor: str | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=200),
+) -> dict[str, Any]:
     store: Store = get_store(request)
-    return {"items": store.list_annotations(), "next_cursor": None}
+    items = list(store.list_annotations())
+    if target_id is not None:
+        items = [a for a in items if a.get("target_id") == target_id]
+    if target_type is not None:
+        items = [a for a in items if a.get("target_type") == target_type]
+    if annotation_type is not None:
+        items = [a for a in items if a.get("annotation_type") == annotation_type]
+    if created_by_identity_type is not None:
+        items = [
+            a for a in items
+            if isinstance(a.get("created_by"), dict)
+            and a["created_by"].get("identity_type") == created_by_identity_type
+        ]
+
+    page, next_cursor = paginate(
+        items,
+        cursor=cursor,
+        limit=limit,
+        key=lambda a: (a.get("created_at") or "", a.get("id") or ""),
+        order="desc",
+    )
+    return {"items": page, "next_cursor": next_cursor}
 
 
 @router.get("/{ann_id}")

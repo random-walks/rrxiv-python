@@ -1,0 +1,109 @@
+{
+  "rrxiv_version": "0.1.0",
+  "id": "01923f8e-0003-7c4d-9e1f-3a2b1c0d4e5f",
+  "id_slug": "rrxiv:2605.00003",
+  "version": "v2",
+  "previous_version": "01923f8d-0003-7c4d-9e1f-3a2b1c0d4e5f",
+  "title": "Reproducibility budgets for ML preprints",
+  "authors": [
+    {
+      "name": "A. Tanaka",
+      "orcid": "0000-0003-2104-9921"
+    },
+    {
+      "name": "S. Park",
+      "orcid": "0000-0002-4416-7780"
+    },
+    {
+      "name": "D. Williams",
+      "orcid": "0000-0001-9384-2210"
+    }
+  ],
+  "abstract": "We argue that preprint platforms should require authors to declare a reproducibility budget at submission time — an explicit specification of the compute, data, and human-time required to replicate the paper's central claims. We evaluate adoption costs over 12 months and report mixed results: smaller labs benefit, large labs resist.",
+  "submitted_at": "2026-05-12T09:30:00Z",
+  "license": "CC-BY-4.0",
+  "topics": [
+    "stat.ML",
+    "cs.LG"
+  ],
+  "source": {
+    "format": "latex",
+    "uri": "https://api.rrxiv.org/api/v0/papers/01923f8e-0003-7c4d-9e1f-3a2b1c0d4e5f/source"
+  },
+  "sections": [],
+  "figures": [],
+  "citations": [
+    {
+      "id": "cite-repro-arxiv-1",
+      "kind": "arxiv",
+      "ref": "1812.07823",
+      "title": "Computational reproducibility at scale"
+    },
+    {
+      "id": "cite-repro-doi-1",
+      "kind": "doi",
+      "ref": "10.1038/s41586-021-03787-7",
+      "title": "Reproducibility in machine learning"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "ann-repro-replication-1",
+      "target_id": "01923f8e-0003-7c4d-9e1f-3a2b1c0d4e5f:c1",
+      "target_type": "claim",
+      "annotation_type": "replication",
+      "content": "Replicated on an independent 18-paper corpus; effect size within CI.",
+      "evidence_links": [
+        "https://example.org/replications/repro-budgets-c1"
+      ],
+      "created_at": "2026-05-18T14:00:00Z",
+      "created_by": {
+        "identity_type": "orcid",
+        "identity": "0000-0003-1110-3001"
+      },
+      "structured_payload": {
+        "n": 18,
+        "effect_lower": 0.21,
+        "effect_upper": 0.34
+      }
+    }
+  ],
+  "claims": [
+    {
+      "id": "01923f8e-0003-7c4d-9e1f-3a2b1c0d4e5f:c1",
+      "paper_id": "01923f8e-0003-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "Reproducibility-budget declarations correlate with 2.3x higher replication success rates (p < 0.05).",
+      "claim_type": "empirical",
+      "evidence_type": "observation",
+      "extracted_by": "author",
+      "canonical": true,
+      "replication_status": "replicated",
+      "extends": [
+        "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f:c1"
+      ]
+    },
+    {
+      "id": "01923f8e-0003-7c4d-9e1f-3a2b1c0d4e5f:c2",
+      "paper_id": "01923f8e-0003-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "Mandatory budget declarations reduce submission volume by 15% in the first quarter.",
+      "claim_type": "empirical",
+      "evidence_type": "observation",
+      "extracted_by": "author",
+      "canonical": true,
+      "replication_status": "contradicted",
+      "supports": [
+        "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f:c4"
+      ]
+    },
+    {
+      "id": "01923f8e-0003-7c4d-9e1f-3a2b1c0d4e5f:c3",
+      "paper_id": "01923f8e-0003-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "Budgets self-correct via community feedback over a 6-month window.",
+      "claim_type": "empirical",
+      "evidence_type": "observation",
+      "extracted_by": "author",
+      "canonical": true,
+      "replication_status": "partial"
+    }
+  ]
+}

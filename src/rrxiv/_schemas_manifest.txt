@@ -1,10 +1,10 @@
 # Schema sync manifest
 
-Synced from: ../rrxiv/schema
-Source repo: /Users/blaise/Desktop/blaise-oss/rrvix-dev-workspace/repos/rrxiv
-Branch:      main
-Commit:      e4ae3f1beb12e3c709a0200ef9d81ff34faac6de
-Synced at:   2026-05-05T18:05:11Z
+Synced from: /Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv-python/../rrxiv/schema
+Source repo: /Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv
+Branch:      proposals/cli-sigs-server
+Commit:      afdfb947318dfa6f0e9201bf610d89063ec20f1c
+Synced at:   2026-05-18T23:59:38Z
 
 Files:
   - annotation.schema.json
@@ -13,6 +13,7 @@ Files:
   - claim.schema.json
   - figure.schema.json
   - paper.schema.json
+  - paper_list_item.schema.json
   - section.schema.json
 
 Run scripts/regen_models.sh to regenerate pydantic models from these.

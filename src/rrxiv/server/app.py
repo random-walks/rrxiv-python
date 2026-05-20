@@ -12,7 +12,9 @@ from rrxiv.server.auth.router import router as auth_router
 from rrxiv.server.auth.signature_middleware import (
     SignatureVerificationMiddleware,
 )
+from rrxiv.server.authors.router import router as authors_router
 from rrxiv.server.claims.router import router as claims_router
+from rrxiv.server.discovery.router import router as discovery_router
 from rrxiv.server.errors import install_exception_handlers
 from rrxiv.server.papers.router import router as papers_router
 from rrxiv.server.search.router import router as search_router
@@ -90,6 +92,8 @@ def build_app(
     api.include_router(annotations_router)
     api.include_router(snapshots_router)
     api.include_router(search_router)
+    api.include_router(discovery_router)
+    api.include_router(authors_router)
     app.include_router(api, prefix=API_PREFIX)
 
     if settings.enable_cors:
@@ -97,11 +101,15 @@ def build_app(
 
         # Read endpoints are documented as CORS-permissive in the spec.
         # Writes require the bearer + Idempotency-Key, which makes them
-        # CORS-safe enough; in v0.1 we allow * on all origins. Production
-        # deployments may want to tighten.
+        # CORS-safe enough. Production deployments set
+        # ``RRXIV_CORS_ORIGINS=https://rrxiv.org,...`` to lock the
+        # allowlist down; dev mode defaults to ``*``.
+        allow_origins = (
+            list(settings.cors_origins) if settings.cors_origins else ["*"]
+        )
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
+            allow_origins=allow_origins,
             allow_methods=["*"],
             allow_headers=["*"],
         )

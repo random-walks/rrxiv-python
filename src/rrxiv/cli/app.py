@@ -96,11 +96,28 @@ def serve(
             "--store", help="Backend URL: memory:// or sqlite:///path."
         ),
     ] = "memory://",
+    seed_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--seed-dir",
+            help=(
+                "Directory of *.cir.json files to seed on first boot. "
+                "Skipped if the store is already non-empty."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Start the rrxiv reference FastAPI server."""
     from rrxiv.cli.serve import serve as _serve
 
-    _serve(host=host, port=port, dev_mode=dev_mode, reload=reload, store=store)
+    _serve(
+        host=host,
+        port=port,
+        dev_mode=dev_mode,
+        reload=reload,
+        store=store,
+        seed_dir=seed_dir,
+    )
 
 
 @app.command()
@@ -390,6 +407,12 @@ snapshot_app = typer.Typer(
     help="Snapshot tarball create / validate.",
 )
 app.add_typer(snapshot_app, name="snapshot")
+
+
+# Bulk seed (RRP-0012 / Phase 1 deployment).
+from rrxiv.cli.seed import seed_app  # noqa: E402
+
+app.add_typer(seed_app, name="seed-store", help="Bulk-load CIRs into a store, bypassing /submissions.")
 
 
 @snapshot_app.command("create")

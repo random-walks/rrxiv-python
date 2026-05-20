@@ -34,6 +34,11 @@ from rrxiv.models._generated.claim_schema import (
     SourceLocation,
 )
 from rrxiv.models._generated.figure_schema import Figure
+from rrxiv.models._generated.paper_list_item_schema import (
+    PaperListItem,
+    Stats,
+    Status as PaperStatus,
+)
 from rrxiv.models._generated.paper_schema import (
     Author,
     Format,
@@ -58,10 +63,13 @@ __all__ = [
     "Format",
     "IdentityType",
     "Paper",
+    "PaperListItem",
+    "PaperStatus",
     "ReplicationStatus",
     "Scope",
     "Section",
     "Source",
     "SourceLocation",
+    "Stats",
     "TargetType",
 ]

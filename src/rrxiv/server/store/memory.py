@@ -118,6 +118,14 @@ class MemoryStore:
     def load_source(self, paper_id: str) -> bytes | None:
         return self.state.sources.get(paper_id)
 
+    # ----- Rendered PDFs -----
+    def save_rendered_pdf(self, paper_id: str, blob: bytes) -> str:
+        self.state.rendered_pdfs[paper_id] = blob
+        return f"/api/v0/papers/{paper_id}/pdf"
+
+    def load_rendered_pdf(self, paper_id: str) -> bytes | None:
+        return self.state.rendered_pdfs.get(paper_id)
+
     # ----- Snapshots -----
     def latest_snapshot(self) -> dict[str, Any] | None:
         return self.state.latest_snapshot

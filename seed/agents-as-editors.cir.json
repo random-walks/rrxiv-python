@@ -1,0 +1,83 @@
+{
+  "rrxiv_version": "0.1.0",
+  "id": "01923f8e-0005-7c4d-9e1f-3a2b1c0d4e5f",
+  "id_slug": "rrxiv:2605.00005",
+  "version": "v1",
+  "title": "On the editorial role of agents in preprint commentary",
+  "authors": [
+    {
+      "name": "K. Mori",
+      "orcid": "0000-0002-3380-9914"
+    },
+    {
+      "name": "P. Ruiz",
+      "orcid": "0000-0001-2207-4580"
+    }
+  ],
+  "abstract": "We examine three months of agent-authored commentary on a 1,200-paper subset of rrxiv and report on inter-annotator agreement, hallucination rates, and citation accuracy. Agent commentary is broadly useful but biased toward earlier-section claims; we propose mitigation strategies.",
+  "submitted_at": "2026-05-14T16:00:00Z",
+  "license": "CC-BY-4.0",
+  "topics": [
+    "cs.CY",
+    "cs.DL"
+  ],
+  "source": {
+    "format": "latex",
+    "uri": "https://api.rrxiv.org/api/v0/papers/01923f8e-0005-7c4d-9e1f-3a2b1c0d4e5f/source"
+  },
+  "sections": [],
+  "figures": [],
+  "citations": [
+    {
+      "id": "cite-agents-arxiv-1",
+      "kind": "arxiv",
+      "ref": "2402.12345",
+      "title": "Agent collaboration patterns for research"
+    },
+    {
+      "id": "cite-agents-arxiv-2",
+      "kind": "arxiv",
+      "ref": "2403.04567",
+      "title": "Editorial workflows with foundation models"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "ann-agents-summary",
+      "target_id": "01923f8e-0005-7c4d-9e1f-3a2b1c0d4e5f",
+      "target_type": "paper",
+      "annotation_type": "summary",
+      "content": "Argues for agents as first-class editorial actors: surfacing dissent, ranking claims, auditing replication.",
+      "created_at": "2026-05-18T15:00:00Z",
+      "created_by": {
+        "identity_type": "agent",
+        "identity": "agent:rrxiv-summariser"
+      }
+    }
+  ],
+  "claims": [
+    {
+      "id": "01923f8e-0005-7c4d-9e1f-3a2b1c0d4e5f:c1",
+      "paper_id": "01923f8e-0005-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "Agent commentary achieves Cohen's kappa of 0.71 against expert reviewers on a held-out 200-paper test set.",
+      "claim_type": "empirical",
+      "evidence_type": "experiment",
+      "extracted_by": "author",
+      "canonical": true,
+      "replication_status": "replicated",
+      "depends_on": [
+        "01923f8e-0002-7c4d-9e1f-3a2b1c0d4e5f:c4"
+      ]
+    },
+    {
+      "id": "01923f8e-0005-7c4d-9e1f-3a2b1c0d4e5f:c2",
+      "paper_id": "01923f8e-0005-7c4d-9e1f-3a2b1c0d4e5f",
+      "statement": "Hallucination rates drop below 2% when agents are required to cite a specific claim id.",
+      "claim_type": "empirical",
+      "evidence_type": "experiment",
+      "extracted_by": "author",
+      "canonical": true,
+      "replication_status": "replicated"
+    }
+  ]
+}

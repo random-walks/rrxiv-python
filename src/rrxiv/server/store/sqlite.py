@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS claims (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
 
 CREATE TABLE IF NOT EXISTS sources (paper_id TEXT PRIMARY KEY, blob BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS rendered_pdfs (paper_id TEXT PRIMARY KEY, blob BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS snapshot_blobs (snapshot_id TEXT PRIMARY KEY, blob BLOB NOT NULL);
 
 CREATE TABLE IF NOT EXISTS challenges (
@@ -332,6 +333,24 @@ class SqliteStore:
         with self._lock:
             row = self._conn.execute(
                 "SELECT blob FROM sources WHERE paper_id = ?", (paper_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return bytes(row[0])
+
+    def save_rendered_pdf(self, paper_id: str, blob: bytes) -> str:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO rendered_pdfs(paper_id, blob) VALUES (?, ?)",
+                (paper_id, blob),
+            )
+            self._conn.commit()
+        return f"/api/v0/papers/{paper_id}/pdf"
+
+    def load_rendered_pdf(self, paper_id: str) -> bytes | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT blob FROM rendered_pdfs WHERE paper_id = ?", (paper_id,)
             ).fetchone()
         if row is None:
             return None

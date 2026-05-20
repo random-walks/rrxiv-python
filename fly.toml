@@ -1,0 +1,51 @@
+# fly.toml — Fly.io deploy config for the rrxiv reference server.
+#
+# Create the app once (from outside this file):
+#   fly apps create rrxiv-api
+#   fly volumes create rrxiv_data --region iad --size 1
+#   fly secrets set RRXIV_ORCID_CLIENT_ID=... RRXIV_ORCID_CLIENT_SECRET=...
+#
+# Then on every deploy:
+#   fly deploy
+
+app = "rrxiv-api"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  RRXIV_STORE_URL = "sqlite:////data/rrxiv.db"
+  RRXIV_API_BASE = "https://api.rrxiv.org/api/v0"
+  RRXIV_DEV_MODE = "0"
+  RRXIV_CORS_ORIGINS = "https://rrxiv.org,https://www.rrxiv.org"
+  RRXIV_LOG_LEVEL = "info"
+
+[[mounts]]
+  source = "rrxiv_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 100
+    hard_limit = 200
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/api/v0/version"
+    protocol = "http"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

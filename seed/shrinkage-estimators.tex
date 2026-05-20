@@ -1,0 +1,37 @@
+\documentclass{rrxiv}
+\rrxivid{rrxiv:2605.00004}
+\rrxivversion{v1}
+\rrxivprotocolversion{0.1.0}
+\rrxivlicense{CC-BY-4.0}
+\rrxivtopics{stat.ME}
+
+\title{A negative result on shrinkage estimators in small-N replication}
+\author{L. Okafor}
+\date{2026-05-13}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We attempt to replicate the shrinkage-estimator results of [Brown 2021] under small-N conditions and report a negative finding. Our analysis identifies two likely sources of the original effect: data leakage in the holdout split and a misspecified prior. We release replication code and a corrected reanalysis.
+\end{abstract}
+
+\section{Claims}
+\begin{claim}[Claim 1]
+\label{claim:c1}
+Brown 2021's reported shrinkage gains do not survive a leak-free reanalysis.
+
+\emph{Replication status: untested.}
+\end{claim}
+
+\begin{claim}[Claim 2]
+\label{claim:c2}
+The misspecified prior accounts for \textasciitilde{}60\% of the reported effect size.
+
+\emph{Replication status: untested.}
+\end{claim}
+
+\section{Notes}
+This document is a synthetic render of the canonical CIR for demonstration purposes. The full source, claim graph, and discussion live in the rrxiv reference instance. See the \texttt{rrxiv} protocol repository for the schema.
+
+\end{document}
