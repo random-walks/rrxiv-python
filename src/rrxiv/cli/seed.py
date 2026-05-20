@@ -302,118 +302,148 @@ def seed_store_cmd(
         )
         raise typer.Exit(code=0)
 
-    papers_added = 0
-    claims_added = 0
-    sources_added = 0
-    pdfs_added = 0
-    minted_slugs = 0
-    annotations_added = 0
+    totals: dict[str, int] = {
+        "papers": 0,
+        "claims": 0,
+        "annotations": 0,
+        "sources": 0,
+        "pdfs": 0,
+        "slugs_minted": 0,
+    }
 
     for cir_path in cir_files:
-        with cir_path.open("r", encoding="utf-8") as f:
-            cir = json.load(f)
-
-        # If this is a paper-repo's rrxiv-meta.json (no built CIR yet),
-        # promote it into a minimal CIR-shaped dict. The paper is
-        # ingested with no claims/annotations until the user runs the
-        # paper's own scripts/extract-cir.sh and reseeds.
-        if cir_path.name == "rrxiv-meta.json":
-            paper_id = cir.get("id") or cir.get("id_slug")
-            if not paper_id:
-                # Use the repo dir name as a deterministic placeholder.
-                paper_id = cir_path.parent.name
-            cir.setdefault("id", paper_id)
-            cir.setdefault("claims", [])
-            cir.setdefault("annotations", [])
-            cir.setdefault("citations", [])
-            cir.setdefault("sections", [])
-            cir.setdefault("figures", [])
-            # Source uri: link to the paper-repo on GitHub if we can guess.
-            cir.setdefault("source", {"format": "latex", "uri": None})
-            cir.setdefault("submitted_at", _today_iso())
-
-        paper_id = cir.get("id")
-        if not paper_id:
-            typer.secho(
-                f"  skip: {cir_path.name} (missing id)", fg="yellow"
-            )
+        per_file = load_cir_into_store(cir_path, store, quiet=quiet)
+        if per_file is None:
             continue
-
-        # Mint a slug if missing — seed CIRs may omit it.
-        if not cir.get("id_slug"):
-            cir["id_slug"] = mint_slug(store)
-            minted_slugs += 1
-        elif not is_slug(cir["id_slug"]):
-            typer.secho(
-                f"  warn: {cir_path.name} has malformed id_slug "
-                f"'{cir['id_slug']}' — will not match pattern",
-                fg="yellow",
-            )
-
-        # The rrxiv parser stamps claim.id / claim.paper_id / edge
-        # targets with the meta-slug prefix (e.g.\ "my-paper:prop:I.1")
-        # because at parse-time it doesn't know the canonical UUID the
-        # store will key off. Rewrite every such reference here so the
-        # deployed instance — which queries claims by canonical paper_id
-        # — finds them. Idempotent: if the CIR already uses the canonical
-        # paper_id as the prefix, this is a no-op.
-        rewrites = _canonicalise_claim_ids(cir, paper_id)
-        if rewrites and not quiet:
-            typer.echo(
-                f"    canonicalised {rewrites} id/paper_id/edge references"
-            )
-
-        # Save source archive + rendered PDF first so we can stamp the
-        # canonical API URIs onto the paper record itself. The CIR
-        # produced by ``rrxiv parse`` carries a ``file://...`` URI
-        # pointing at the build directory; that's useless from the
-        # web client. Rewrite to the server-relative endpoint the
-        # store exposes (``/api/v0/papers/{id}/{source,pdf}``).
-        src_path = _sibling_source(cir_path)
-        if src_path is not None:
-            source_uri = store.save_source(paper_id, src_path.read_bytes())
-            cir.setdefault("source", {})
-            cir["source"]["uri"] = source_uri
-            cir["source"].setdefault("format", "latex")
-            sources_added += 1
-
-        pdf_path = _sibling_pdf(cir_path)
-        if pdf_path is not None:
-            pdf_uri = store.save_rendered_pdf(paper_id, pdf_path.read_bytes())
-            cir["rendered_pdf_uri"] = pdf_uri
-            pdfs_added += 1
-
-        paper_metadata = {
-            k: v
-            for k, v in cir.items()
-            if k not in ("claims", "citations", "annotations", "sections", "figures")
-        }
-        store.add_paper(paper_metadata)
-        store.add_cir(cir)
-        papers_added += 1
-
-        for claim in cir.get("claims") or []:
-            # Defensive: _canonicalise_claim_ids should already have set
-            # this, but force it for CIRs that ship with no claims and
-            # then have some added later.
-            claim["paper_id"] = paper_id
-            store.add_claim(claim)
-            claims_added += 1
-
-        for ann in cir.get("annotations") or []:
-            store.add_annotation(ann)
-            annotations_added += 1
-
+        for k, v in per_file.items():
+            if k.startswith("_"):
+                continue
+            totals[k] = totals.get(k, 0) + int(v)
         if not quiet:
             typer.echo(
                 f"  load: {cir_path.relative_to(from_)} → "
-                f"id={paper_id} slug={cir.get('id_slug')!r}"
+                f"id={per_file['_paper_id']} slug={per_file['_slug']!r}"
             )
 
     typer.echo("")
     typer.echo(
-        f"Done. papers={papers_added} claims={claims_added} "
-        f"annotations={annotations_added} "
-        f"sources={sources_added} pdfs={pdfs_added} "
-        f"slugs_minted={minted_slugs}"
+        f"Done. papers={totals['papers']} claims={totals['claims']} "
+        f"annotations={totals['annotations']} "
+        f"sources={totals['sources']} pdfs={totals['pdfs']} "
+        f"slugs_minted={totals['slugs_minted']}"
     )
+
+
+def load_cir_into_store(
+    cir_path: Path,
+    store: Any,
+    *,
+    quiet: bool = True,
+) -> dict[str, Any] | None:
+    """Load a single CIR JSON file (or paper-repo meta) into the store.
+
+    This is the canonical pathway: handles slug minting, paper-repo
+    meta promotion, claim/edge canonicalisation, source/PDF persistence,
+    and source.uri / source.rendered_pdf_uri rewriting in one place.
+    Used by both ``rrxiv seed-store`` and ``rrxiv serve --seed-dir``.
+
+    Returns a dict of counters (papers/claims/annotations/sources/pdfs/
+    slugs_minted) plus ``_paper_id`` and ``_slug`` for caller logging,
+    or ``None`` if the file was skipped (e.g. missing id).
+    """
+    with cir_path.open("r", encoding="utf-8") as f:
+        cir = json.load(f)
+
+    # If this is a paper-repo's rrxiv-meta.json (no built CIR yet),
+    # promote it into a minimal CIR-shaped dict. The paper is
+    # ingested with no claims/annotations until the user runs the
+    # paper's own scripts/extract-cir.sh and reseeds.
+    if cir_path.name == "rrxiv-meta.json":
+        paper_id = cir.get("id") or cir.get("id_slug")
+        if not paper_id:
+            # Use the repo dir name as a deterministic placeholder.
+            paper_id = cir_path.parent.name
+        cir.setdefault("id", paper_id)
+        cir.setdefault("claims", [])
+        cir.setdefault("annotations", [])
+        cir.setdefault("citations", [])
+        cir.setdefault("sections", [])
+        cir.setdefault("figures", [])
+        cir.setdefault("source", {"format": "latex", "uri": None})
+        cir.setdefault("submitted_at", _today_iso())
+
+    paper_id = cir.get("id")
+    if not paper_id:
+        if not quiet:
+            typer.secho(
+                f"  skip: {cir_path.name} (missing id)", fg="yellow"
+            )
+        return None
+
+    slugs_minted = 0
+    if not cir.get("id_slug"):
+        cir["id_slug"] = mint_slug(store)
+        slugs_minted = 1
+    elif not is_slug(cir["id_slug"]) and not quiet:
+        typer.secho(
+            f"  warn: {cir_path.name} has malformed id_slug "
+            f"'{cir['id_slug']}' — will not match pattern",
+            fg="yellow",
+        )
+
+    # Canonicalise parser-stamped meta-slug prefixes to canonical UUIDs.
+    rewrites = _canonicalise_claim_ids(cir, paper_id)
+    if rewrites and not quiet:
+        typer.echo(
+            f"    canonicalised {rewrites} id/paper_id/edge references"
+        )
+
+    # Persist source archive + PDF first so we can stamp their API
+    # URIs onto the CIR/paper record before saving.
+    sources_added = 0
+    src_path = _sibling_source(cir_path)
+    if src_path is not None:
+        source_uri = store.save_source(paper_id, src_path.read_bytes())
+        cir.setdefault("source", {})
+        cir["source"]["uri"] = source_uri
+        cir["source"].setdefault("format", "latex")
+        sources_added = 1
+
+    pdfs_added = 0
+    pdf_path = _sibling_pdf(cir_path)
+    if pdf_path is not None:
+        pdf_uri = store.save_rendered_pdf(paper_id, pdf_path.read_bytes())
+        cir.setdefault("source", {})
+        cir["source"]["rendered_pdf_uri"] = pdf_uri
+        cir["source"].setdefault("format", "latex")
+        pdfs_added = 1
+
+    paper_metadata = {
+        k: v
+        for k, v in cir.items()
+        if k not in ("claims", "citations", "annotations", "sections", "figures")
+    }
+    store.add_paper(paper_metadata)
+    store.add_cir(cir)
+
+    claims_added = 0
+    for claim in cir.get("claims") or []:
+        claim["paper_id"] = paper_id
+        store.add_claim(claim)
+        claims_added += 1
+
+    annotations_added = 0
+    for ann in cir.get("annotations") or []:
+        store.add_annotation(ann)
+        annotations_added += 1
+
+    return {
+        "papers": 1,
+        "claims": claims_added,
+        "annotations": annotations_added,
+        "sources": sources_added,
+        "pdfs": pdfs_added,
+        "slugs_minted": slugs_minted,
+        "_paper_id": paper_id,
+        "_slug": cir.get("id_slug"),
+    }

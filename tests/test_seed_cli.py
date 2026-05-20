@@ -93,7 +93,9 @@ def test_seed_rewrites_source_uri_to_api_endpoint(tmp_path: Path) -> None:
     paper = store.get_paper(paper_id)
     assert paper is not None
     assert paper["source"]["uri"] == f"/api/v0/papers/{paper_id}/source"
-    assert paper["rendered_pdf_uri"] == f"/api/v0/papers/{paper_id}/pdf"
+    assert paper["source"]["rendered_pdf_uri"] == (
+        f"/api/v0/papers/{paper_id}/pdf"
+    )
     assert store.load_source(paper_id) is not None
     assert store.load_rendered_pdf(paper_id) is not None
     store.close()
