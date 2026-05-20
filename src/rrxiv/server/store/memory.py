@@ -149,3 +149,12 @@ class MemoryStore:
             window.pop(0)
         window.append(now_unix)
         return len(window)
+
+    # ----- Corpus management -----
+    def clear_corpus(self) -> None:
+        self.state.papers.clear()
+        self.state.cirs.clear()
+        self.state.claims.clear()
+        self.state.annotations.clear()
+        self.state.sources.clear()
+        self.state.rendered_pdfs.clear()

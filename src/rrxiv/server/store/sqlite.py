@@ -453,6 +453,21 @@ class SqliteStore:
             self._conn.commit()
             return len(window)
 
+    # ----- Corpus management -----
+    def clear_corpus(self) -> None:
+        """Truncate the read-corpus tables. Used by seed-store --reset."""
+        with self._lock:
+            for table in (
+                "papers",
+                "cirs",
+                "claims",
+                "annotations",
+                "sources",
+                "rendered_pdfs",
+            ):
+                self._conn.execute(f"DELETE FROM {table}")
+            self._conn.commit()
+
 
 # ----- Identity (de)serialisation -----
 
