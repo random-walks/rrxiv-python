@@ -12,19 +12,39 @@
 \begin{document}
 \maketitle
 
+\begin{center}
+\small\itshape
+Demonstration paper in the rrxiv reference corpus. The canonical machine-readable version lives at \href{https://rrxiv.com/papers/rrxiv:2605.00006}{rrxiv.com/papers/rrxiv:2605.00006}.
+\end{center}
+
 \begin{abstract}
 An opinion piece distinguishing the structural commitments of citation networks from those of knowledge graphs proper, with implications for preprint infrastructure. We argue that conflating the two has produced a decade of misnamed retrieval systems.
 \end{abstract}
 
-\section{Claims}
+\section{Introduction}
+An opinion piece distinguishing the structural commitments of citation networks from those of knowledge graphs proper, with implications for preprint infrastructure. We argue that conflating the two has produced a decade of misnamed retrieval systems.
+
+This document is a structured encoding of the paper in the \texttt{rrxiv} protocol's Canonical Intermediate Representation (CIR). It engages with the topic \texttt{cs.DL}. The encoding registers 1 formal claim (1 untested). Each claim is annotated with its claim type, evidence type, and current replication status; dependency edges between claims, when present, form a machine-readable proof DAG.
+
+\section{Methodology}
+We follow the \texttt{rrxiv} convention of separating \emph{claims} (the proposition under consideration) from \emph{evidence} (the argument or data supporting it). Each claim in the results section below is presented with its statement, the type of evidence appealed to, and a brief discussion of replication status. Where claims depend on prior results --- internal or external --- the dependency is recorded in the CIR as a \texttt{\textbackslash dependson} edge, so the full inferential structure is machine-traversable. Citations of external work appear in the References section at the end of this document.
+
+\section{Results: registered claims}
+\subsection*{Claim 1}
 \begin{claim}[Claim 1]
 \label{claim:c1}
 Citation networks encode 'this work cited that work' edges; knowledge graphs encode typed semantic relations — the two are not interchangeable.
 
 \emph{Replication status: untested.}
 \end{claim}
+As of the encoding date, it has not yet been independently tested. It depends on 1 prior claim in the same paper.
 
-\section{Notes}
-This document is a synthetic render of the canonical CIR for demonstration purposes. The full source, claim graph, and discussion live in the rrxiv reference instance. See the \texttt{rrxiv} protocol repository for the schema.
+\section{Discussion}
+The claim graph above is the primary product of this paper. By making every claim independently citable --- and by recording its dependencies, evidence type, and current replication status as structured fields --- the paper participates in the rrxiv reproducibility-first corpus. Subsequent papers in this instance may extend, contradict, or replicate individual claims here without forcing a rewrite of the entire document. See the canonical version online for the live discourse layer.
 
+\section{References}
+\begin{itemize}[leftmargin=*]
+\item Knowledge graphs from scientific abstracts
+\item Citation networks vs knowledge graphs
+\end{itemize}
 \end{document}
