@@ -21,3 +21,8 @@ htmlcov/
 
 # Generated
 *.log
+
+# Secrets — copy .env.example to .env and edit. Never commit .env.
+.env
+.env.local
+.env.*.local

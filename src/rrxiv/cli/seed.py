@@ -32,6 +32,7 @@ record + claims; the sources tarball is persisted if present.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -44,23 +45,85 @@ from rrxiv.server.store import store_from_url
 seed_app = typer.Typer(no_args_is_help=False)
 
 
+def _today_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
 def _iter_cir_files(root: Path) -> list[Path]:
     """Discover all CIR JSON files under ``root``.
 
-    Both ``foo.cir.json`` (flat) and ``foo/cir.json`` (subdir) layouts
-    are recognised.
+    Three layouts are recognised:
+
+    1. **Flat** — ``foo.cir.json`` in ``root``. Used by the in-repo seed
+       corpus.
+    2. **Subdir** — ``foo/cir.json``. Used by older test fixtures.
+    3. **Paper-repo** — ``root`` is itself a paper repo following the
+       ``rrxiv-paper-template`` convention (``paper/main.tex`` +
+       ``build/main.cir.json`` + ``rrxiv-meta.json``). The build output
+       is the canonical CIR; the loader falls back to building it from
+       ``rrxiv-meta.json`` if ``build/main.cir.json`` is missing (this
+       lets a fresh clone be ingested without first running tectonic
+       locally, at the cost of a meta-only CIR with no claims).
     """
     found: list[Path] = []
+    # Paper-repo layout — recognised by sibling files.
+    if (root / "paper" / "main.tex").is_file() and (root / "rrxiv-meta.json").is_file():
+        built = root / "build" / "main.cir.json"
+        if built.is_file():
+            found.append(built)
+            return found
+        # No built CIR — synthesise a placeholder from rrxiv-meta.json
+        # alongside paper/main.tex. The placeholder is recognised by the
+        # seed loader below.
+        found.append(root / "rrxiv-meta.json")
+        return found
+
     for path in sorted(root.iterdir()):
         if path.is_file() and path.name.endswith(".cir.json"):
             found.append(path)
         elif path.is_dir() and (path / "cir.json").is_file():
             found.append(path / "cir.json")
+        elif path.is_dir() and (path / "paper" / "main.tex").is_file() and (path / "rrxiv-meta.json").is_file():
+            # Nested paper repos inside `root` (e.g. a `papers/` dir
+            # containing many cloned paper repos).
+            built = path / "build" / "main.cir.json"
+            if built.is_file():
+                found.append(built)
+            else:
+                found.append(path / "rrxiv-meta.json")
     return found
+
+
+def _is_paper_repo_root(path: Path) -> bool:
+    """True when ``path`` looks like a rrxiv-paper-template-shaped repo root."""
+    return (path / "paper" / "main.tex").is_file() and (path / "rrxiv-meta.json").is_file()
+
+
+def _paper_repo_root(cir_or_meta_path: Path) -> Path | None:
+    """If the loader was handed a paper-repo CIR or meta, return its root."""
+    p = cir_or_meta_path
+    # build/main.cir.json case
+    if p.name == "main.cir.json" and p.parent.name == "build" and _is_paper_repo_root(p.parent.parent):
+        return p.parent.parent
+    # rrxiv-meta.json case (no built CIR yet)
+    if p.name == "rrxiv-meta.json" and _is_paper_repo_root(p.parent):
+        return p.parent
+    return None
 
 
 def _sibling_source(cir_path: Path) -> Path | None:
     """Find a source tarball sibling to a CIR file, if any."""
+    repo_root = _paper_repo_root(cir_path)
+    if repo_root is not None:
+        # Paper-repo layout: prefer the built tarball, fall back to
+        # tar'ing paper/main.tex + paper/rrxiv.cls on the fly.
+        for c in (
+            repo_root / "build" / "source.tar.gz",
+            repo_root / "build" / "main.source.tar.gz",
+        ):
+            if c.is_file():
+                return c
+        return None
     if cir_path.parent.name and cir_path.name == "cir.json":
         # subdir layout
         candidates = [
@@ -81,6 +144,10 @@ def _sibling_source(cir_path: Path) -> Path | None:
 
 def _sibling_pdf(cir_path: Path) -> Path | None:
     """Find a rendered PDF sibling to a CIR file, if any."""
+    repo_root = _paper_repo_root(cir_path)
+    if repo_root is not None:
+        candidate = repo_root / "build" / "main.pdf"
+        return candidate if candidate.is_file() else None
     if cir_path.name == "cir.json":
         candidates = [cir_path.parent / "paper.pdf", cir_path.parent / "rendered.pdf"]
     else:
@@ -147,6 +214,25 @@ def seed_store_cmd(
     for cir_path in cir_files:
         with cir_path.open("r", encoding="utf-8") as f:
             cir = json.load(f)
+
+        # If this is a paper-repo's rrxiv-meta.json (no built CIR yet),
+        # promote it into a minimal CIR-shaped dict. The paper is
+        # ingested with no claims/annotations until the user runs the
+        # paper's own scripts/extract-cir.sh and reseeds.
+        if cir_path.name == "rrxiv-meta.json":
+            paper_id = cir.get("id") or cir.get("id_slug")
+            if not paper_id:
+                # Use the repo dir name as a deterministic placeholder.
+                paper_id = cir_path.parent.name
+            cir.setdefault("id", paper_id)
+            cir.setdefault("claims", [])
+            cir.setdefault("annotations", [])
+            cir.setdefault("citations", [])
+            cir.setdefault("sections", [])
+            cir.setdefault("figures", [])
+            # Source uri: link to the paper-repo on GitHub if we can guess.
+            cir.setdefault("source", {"format": "latex", "uri": None})
+            cir.setdefault("submitted_at", _today_iso())
 
         paper_id = cir.get("id")
         if not paper_id:
