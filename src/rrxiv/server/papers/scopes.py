@@ -13,8 +13,9 @@ hardcoded into the protocol.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 ALL_SCOPE_ID = "all"
 
@@ -90,8 +91,8 @@ def _is_fresh(item: dict[str, Any]) -> bool:
     except ValueError:
         return False
     if when.tzinfo is None:
-        when = when.replace(tzinfo=timezone.utc)
-    return when >= datetime.now(timezone.utc) - timedelta(days=7)
+        when = when.replace(tzinfo=UTC)
+    return when >= datetime.now(UTC) - timedelta(days=7)
 
 
 SCOPE_PREDICATES: dict[str, Callable[[dict[str, Any]], bool]] = {

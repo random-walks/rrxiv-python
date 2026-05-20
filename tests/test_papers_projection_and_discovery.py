@@ -341,7 +341,8 @@ def test_discovery_stats_by_status() -> None:
         resp = c.get("/stats")
     assert resp.status_code == 200
     by_status = resp.json()["by_status"]
-    assert by_status["preprint"] == 2  # p1 (no claims) + p2 (untested with 1 claim, no annotations -> preprint)
+    # p1 (no claims) + p2 (untested with 1 claim, no annotations -> preprint)
+    assert by_status["preprint"] == 2
     assert by_status["replicated"] == 1
     assert by_status["contested"] == 0
     assert by_status["retracted"] == 0

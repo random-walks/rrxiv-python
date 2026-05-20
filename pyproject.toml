@@ -29,6 +29,9 @@ server = [
     "python-multipart>=0.0.9",
     "cryptography>=42.0",
     "http-message-signatures>=2.0,<3",
+    # Optional error reporting. The SDK no-ops at runtime unless
+    # SENTRY_DSN is set, so this dep is safe to include unconditionally.
+    "sentry-sdk[fastapi]>=2.0",
 ]
 dev = [
     "pytest>=8.0",
@@ -42,6 +45,7 @@ dev = [
     "uvicorn[standard]>=0.30",
     "python-multipart>=0.0.9",
     "keyring>=25",
+    "sentry-sdk[fastapi]>=2.0",
 ]
 
 [project.scripts]
@@ -63,6 +67,9 @@ select = ["E", "F", "I", "N", "UP", "B", "RUF"]
 # FastAPI's idiomatic Depends/Header use function calls in argument
 # defaults; ruff's B008 generally applies but is the wrong call here.
 "src/rrxiv/server/**/*.py" = ["B008"]
+# One-off curation scripts contain large embedded data strings where
+# 100-char wrapping hurts readability.
+"scripts/**/*.py" = ["E501"]
 
 [tool.mypy]
 strict = true
