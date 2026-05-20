@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
@@ -147,6 +147,76 @@ def _sibling_source(cir_path: Path) -> Path | None:
         if c.is_file():
             return c
     return None
+
+
+def _canonicalise_claim_ids(cir: dict[str, Any], paper_id: str) -> int:
+    """Rewrite every claim id / paper_id / edge target / annotation
+    target_id that uses the parser's meta-slug prefix to use the
+    canonical ``paper_id`` (the CIR's ``id``, which is the UUIDv7 the
+    instance keys claims off).
+
+    Why: ``rrxiv parse`` stamps IDs as ``<meta_slug>:<kind>:<label>``
+    because at build-time the canonical UUID isn't known. Seed-store
+    sees the canonical UUID as ``cir["id"]`` — substitute every
+    parser-prefix occurrence accordingly so the deployed instance
+    finds the claims (``list_claims_for_paper(paper_id=...)``).
+
+    Idempotent: if the CIR already uses ``paper_id`` as the prefix
+    (e.g.\\ a manually-curated demo fixture), this is a no-op.
+
+    Returns the number of substitutions made — useful for both
+    progress reporting and tests.
+    """
+    claims = cir.get("claims") or []
+    if not claims:
+        return 0
+
+    # All claims from a single parse run share the same prefix. Peek
+    # at the first one to discover what the parser emitted.
+    sample_id = claims[0].get("id") or ""
+    parts = sample_id.split(":", 1)
+    if len(parts) != 2:
+        return 0
+    parser_prefix = parts[0]
+    if parser_prefix == paper_id:
+        # Already canonical or no prefix to rewrite.
+        return 0
+
+    old = parser_prefix + ":"
+    new = paper_id + ":"
+
+    def _rewrite(s: str) -> str:
+        return new + s[len(old) :] if s.startswith(old) else s
+
+    n = 0
+    for c in claims:
+        if (cid := c.get("id")) and cid.startswith(old):
+            c["id"] = _rewrite(cid)
+            n += 1
+        if c.get("paper_id") != paper_id:
+            c["paper_id"] = paper_id
+            n += 1
+        for key in ("depends_on", "supports", "contradicts", "extends"):
+            edges = c.get(key)
+            if not edges:
+                continue
+            new_edges = [_rewrite(t) for t in edges]
+            if new_edges != edges:
+                c[key] = new_edges
+                n += sum(
+                    1 for a, b in zip(edges, new_edges, strict=True) if a != b
+                )
+
+    # Annotations targeting claims also need their target_id rewritten.
+    # Annotations targeting other papers (cross-paper context) are
+    # safe because _rewrite only touches strings starting with the
+    # local parser prefix.
+    for ann in cir.get("annotations") or []:
+        if (tid := ann.get("target_id")) and tid.startswith(old):
+            ann["target_id"] = _rewrite(tid)
+            n += 1
+
+    return n
 
 
 def _sibling_pdf(cir_path: Path) -> Path | None:
@@ -268,8 +338,24 @@ def seed_store_cmd(
         store.add_cir(cir)
         papers_added += 1
 
+        # The rrxiv parser stamps claim.id / claim.paper_id / edge
+        # targets with the meta-slug prefix (e.g.\ "my-paper:prop:I.1")
+        # because at parse-time it doesn't know the canonical UUID the
+        # store will key off. Rewrite every such reference here so the
+        # deployed instance — which queries claims by canonical paper_id
+        # — finds them. Idempotent: if the CIR already uses the canonical
+        # paper_id as the prefix, this is a no-op.
+        rewrites = _canonicalise_claim_ids(cir, paper_id)
+        if rewrites and not quiet:
+            typer.echo(
+                f"    canonicalised {rewrites} id/paper_id/edge references"
+            )
+
         for claim in cir.get("claims") or []:
-            claim.setdefault("paper_id", paper_id)
+            # Defensive: _canonicalise_claim_ids should already have set
+            # this, but force it for CIRs that ship with no claims and
+            # then have some added later.
+            claim["paper_id"] = paper_id
             store.add_claim(claim)
             claims_added += 1
 
