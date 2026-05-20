@@ -37,6 +37,8 @@ from rrxiv.models._generated.figure_schema import Figure
 from rrxiv.models._generated.paper_list_item_schema import (
     PaperListItem,
     Stats,
+)
+from rrxiv.models._generated.paper_list_item_schema import (
     Status as PaperStatus,
 )
 from rrxiv.models._generated.paper_schema import (

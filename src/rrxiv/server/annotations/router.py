@@ -53,8 +53,14 @@ _REQUIRES_NAMED_IDENTITY = require_identity(allow_anonymous=False)
 @router.get("")
 def list_annotations(
     request: Request,
-    target_id: str | None = Query(default=None, description="Filter to annotations on this paper or claim."),
-    target_type: str | None = Query(default=None, description="One of 'paper' or 'claim'."),
+    target_id: str | None = Query(
+        default=None,
+        description="Filter to annotations on this paper or claim.",
+    ),
+    target_type: str | None = Query(
+        default=None,
+        description="One of 'paper' or 'claim'.",
+    ),
     annotation_type: str | None = Query(
         default=None,
         description="Filter by annotation_type (replication/contradiction/erratum/comment/…).",

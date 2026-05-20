@@ -11,7 +11,7 @@ authored, and change as annotations land.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -94,7 +94,7 @@ def compute_stats(paper_id: str, store: Store) -> dict[str, Any]:
         "contested": contested,
         "untested": untested,
         "status": status,
-        "computed_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "computed_at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
     }
 
 

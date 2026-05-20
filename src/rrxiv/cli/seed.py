@@ -32,21 +32,20 @@ record + claims; the sources tarball is persisted if present.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from rrxiv.server.papers.slug import is_slug
-from rrxiv.server.papers.slug import mint_slug
+from rrxiv.server.papers.slug import is_slug, mint_slug
 from rrxiv.server.store import store_from_url
 
 seed_app = typer.Typer(no_args_is_help=False)
 
 
 def _today_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _iter_cir_files(root: Path) -> list[Path]:
@@ -83,7 +82,11 @@ def _iter_cir_files(root: Path) -> list[Path]:
             found.append(path)
         elif path.is_dir() and (path / "cir.json").is_file():
             found.append(path / "cir.json")
-        elif path.is_dir() and (path / "paper" / "main.tex").is_file() and (path / "rrxiv-meta.json").is_file():
+        elif (
+            path.is_dir()
+            and (path / "paper" / "main.tex").is_file()
+            and (path / "rrxiv-meta.json").is_file()
+        ):
             # Nested paper repos inside `root` (e.g. a `papers/` dir
             # containing many cloned paper repos).
             built = path / "build" / "main.cir.json"
@@ -103,7 +106,11 @@ def _paper_repo_root(cir_or_meta_path: Path) -> Path | None:
     """If the loader was handed a paper-repo CIR or meta, return its root."""
     p = cir_or_meta_path
     # build/main.cir.json case
-    if p.name == "main.cir.json" and p.parent.name == "build" and _is_paper_repo_root(p.parent.parent):
+    if (
+        p.name == "main.cir.json"
+        and p.parent.name == "build"
+        and _is_paper_repo_root(p.parent.parent)
+    ):
         return p.parent.parent
     # rrxiv-meta.json case (no built CIR yet)
     if p.name == "rrxiv-meta.json" and _is_paper_repo_root(p.parent):

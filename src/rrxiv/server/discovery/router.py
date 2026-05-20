@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
@@ -115,7 +115,7 @@ def corpus_stats(request: Request) -> dict[str, Any]:
             "retracted": by_status.get("retracted", 0),
         },
         "computed_at": (
-            datetime.now(timezone.utc)
+            datetime.now(UTC)
             .isoformat(timespec="seconds")
             .replace("+00:00", "Z")
         ),

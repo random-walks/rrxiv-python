@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from typing import Any
 
 from fastapi import APIRouter, FastAPI
@@ -31,6 +33,41 @@ from rrxiv.server.submissions.router import (
 PROTOCOL_VERSION = "0.1.0"
 API_PREFIX = "/api/v0"
 
+_log = logging.getLogger(__name__)
+_sentry_initialised = False
+
+
+def _init_sentry() -> None:
+    """Initialise Sentry if SENTRY_DSN is set.
+
+    No-op if the env var is missing or sentry-sdk isn't installed.
+    Safe to call multiple times — guarded by a module-level flag so
+    repeated ``build_app`` calls (tests) don't re-init.
+    """
+    global _sentry_initialised
+    if _sentry_initialised:
+        return
+    dsn = os.environ.get("SENTRY_DSN")
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+    except ImportError:  # pragma: no cover - optional dep
+        _log.warning("SENTRY_DSN set but sentry-sdk not installed; skipping init")
+        return
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+        release=os.environ.get("SENTRY_RELEASE", f"rrxiv-python@{rrxiv_version}"),
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.05")),
+        profiles_sample_rate=float(os.environ.get("SENTRY_PROFILES_SAMPLE_RATE", "0.0")),
+        send_default_pii=False,
+    )
+    _sentry_initialised = True
+    _log.info("Sentry initialised (env=%s, release=%s)",
+              os.environ.get("SENTRY_ENVIRONMENT", "production"),
+              os.environ.get("SENTRY_RELEASE", f"rrxiv-python@{rrxiv_version}"))
+
 
 def build_app(
     *,
@@ -48,6 +85,10 @@ def build_app(
     """
     settings = settings or ServerSettings.from_env()
     store = store or store_from_url(settings.store_url)
+
+    # Initialise error reporting before app construction so any error
+    # raised during startup is captured. No-ops if SENTRY_DSN unset.
+    _init_sentry()
 
     app = FastAPI(
         title="rrxiv reference server",

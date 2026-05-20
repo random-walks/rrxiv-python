@@ -23,7 +23,8 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Any, Callable, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from rrxiv.server.errors import bad_request
 

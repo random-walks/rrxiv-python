@@ -87,9 +87,10 @@ def serve(
                 fg=typer.colors.YELLOW,
             )
         else:
+            import json
+
             from rrxiv.cli.seed import _iter_cir_files, _sibling_pdf, _sibling_source
             from rrxiv.server.papers.slug import is_slug, mint_slug
-            import json
 
             files = _iter_cir_files(seed_dir)
             seeded_papers = 0
