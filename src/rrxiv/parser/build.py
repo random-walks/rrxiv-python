@@ -447,8 +447,21 @@ def _build_sections(tex: TexDocument) -> list[dict[str, Any]]:
 
 def _build_authors(tex: TexDocument) -> list[dict[str, Any]]:
     authors: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for a in tex.authors:
-        authors.append({"name": a.name})
+        # Strip LaTeX wrapping macros (\thanks{}, \texttt{}, etc.) from
+        # the raw \author{...} group contents. Without this, names that
+        # carry footnote-style annotations (``Alice\thanks{a@x.org}``)
+        # round-trip through the CIR with the latex still attached and
+        # show up as distinct authors on read paths.
+        clean_name = tex_to_text(a.name).strip()
+        if not clean_name:
+            continue
+        # Dedup within a single paper, in case the LaTeX repeats \author.
+        if clean_name in seen:
+            continue
+        seen.add(clean_name)
+        authors.append({"name": clean_name})
     if not authors:
         # Required field: minItems=1. If the .tex didn't declare authors,
         # use a placeholder so the CIR is at least constructable.

@@ -37,6 +37,22 @@ _STYLE_MACROS_1ARG: tuple[str, ...] = (
     "hbox",
 )
 
+# Macros that take ONE argument and should be DROPPED entirely along
+# with their argument. These are footnote-style annotations that don't
+# belong in the plain-text representation — e.g. ``\thanks{<email>}``
+# appended to an author name, ``\footnote{<aside>}`` inside an abstract.
+# Without this stripping, ``\author{Alice\thanks{alice@x.org}}`` would
+# canonicalise as ``Alice\thanks{alice@x.org}`` and create duplicate
+# author entries on read paths (one with the thanks, one without).
+_DROP_MACROS_1ARG: tuple[str, ...] = (
+    "thanks",
+    "footnote",
+    "footnotemark",
+    "footnotetext",
+    "marginpar",
+    "marginnote",
+)
+
 # Bare font-size macros that take NO argument and should be dropped.
 _BARE_FONT_MACROS: tuple[str, ...] = (
     "Huge",
@@ -86,6 +102,25 @@ def _strip_one_arg_macros(text: str) -> str:
 
     for _ in range(8):  # bound to protect against pathological input
         new_text, n = pattern.subn(r"\1", text)
+        if n == 0:
+            return new_text
+        text = new_text
+    return text
+
+
+def _drop_one_arg_macros(text: str) -> str:
+    """Drop ``\\macro{X}`` entirely (macro + braces + content).
+
+    Applied to footnote-style macros (``\\thanks``, ``\\footnote``)
+    that don't belong in the plain-text representation. The argument
+    body itself often contains nested LaTeX (``\\texttt{...}``) so we
+    iterate to handle nesting.
+    """
+    macro_alt = "|".join(re.escape(m) for m in _DROP_MACROS_1ARG)
+    pattern = re.compile(rf"\\(?:{macro_alt})\s*\{{[^{{}}]*\}}")
+
+    for _ in range(8):
+        new_text, n = pattern.subn("", text)
         if n == 0:
             return new_text
         text = new_text
@@ -167,7 +202,16 @@ def tex_to_text(text: str) -> str:
     >>> assert tex_to_text(r"\\\\textit{Hello}") == r"\\Hello".replace("\\\\", "")  # doctest: +SKIP
     """
     text = _replace_escaped_specials(text)
-    text = _strip_one_arg_macros(text)
+    # Alternate drop + strip until both stabilise. Required for nested
+    # cases like ``\thanks{\texttt{x}}`` where the inner ``\texttt`` has
+    # braces of its own — strip resolves the inner argument first, then
+    # the outer ``\thanks{x}`` is a flat-brace match for drop.
+    for _ in range(8):
+        prev = text
+        text = _drop_one_arg_macros(text)
+        text = _strip_one_arg_macros(text)
+        if text == prev:
+            break
     text = _strip_bare_font_macros(text)
     text = _strip_special_macros(text)
     text = _strip_line_breaks(text)

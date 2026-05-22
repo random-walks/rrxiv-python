@@ -99,6 +99,41 @@ class TestWhitespace:
         assert tex_to_text("  hello  \n\n") == "hello"
 
 
+class TestDropMacros:
+    """``\\thanks{...}`` and friends should be dropped entirely.
+
+    Regression coverage for the author-name dedup bug: the Euclid CIR
+    declared ``\\author{Blaise Albis-Burdige\\thanks{albisburdige@protonmail.com}}``
+    which round-tripped through the parser with the ``\\thanks`` still
+    attached, causing the same author to appear twice on read paths.
+    """
+
+    def test_thanks_dropped(self) -> None:
+        out = tex_to_text(r"Alice\thanks{alice@example.com}")
+        assert out == "Alice"
+
+    def test_thanks_with_inner_latex(self) -> None:
+        out = tex_to_text(
+            r"Blaise Albis-Burdige\thanks{\texttt{albisburdige@protonmail.com}}"
+        )
+        # \texttt{} inside \thanks{} doesn't matter — the whole \thanks block
+        # is dropped before we recurse into style macros.
+        assert out == "Blaise Albis-Burdige"
+
+    def test_footnote_dropped(self) -> None:
+        out = tex_to_text(r"see\footnote{the appendix} the proof")
+        assert out == "see the proof"
+
+    def test_marginpar_dropped(self) -> None:
+        out = tex_to_text(r"text\marginpar{aside} continues")
+        assert out == "text continues"
+
+    def test_thanks_doesnt_break_other_text(self) -> None:
+        # Sanity: text with no \thanks is unaffected.
+        out = tex_to_text(r"Plain author name")
+        assert out == "Plain author name"
+
+
 class TestPreservation:
     def test_inline_math_preserved(self) -> None:
         out = tex_to_text(r"the function $f(x) = x^2$ is convex")
