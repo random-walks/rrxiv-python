@@ -40,7 +40,14 @@ from rrxiv.server.store import (
     Store,
 )
 
-_CLAIM_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.\-]+:c\d+$")
+# Claim IDs follow the canonical shape ``<paper_id>:<local_id>`` per
+# spec/0003-claim-graph.md. ``local_id`` is author-chosen via
+# ``\label{...}`` and may itself contain colons (e.g. ``prop:I.10``),
+# dots (``thm:main``), or dashes (``claim-4``). Earlier the regex
+# required ``:c<n>`` — that's the parser's default when no label is
+# present, not a protocol requirement. Loosened to accept any
+# reasonably-shaped label.
+_CLAIM_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.\-]+:[A-Za-z0-9_.:\-]+$")
 
 router = APIRouter(prefix="/annotations", tags=["Annotations"])
 
