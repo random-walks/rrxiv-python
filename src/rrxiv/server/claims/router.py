@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query, Request
 
+from rrxiv.server.claims.replication import apply_derived_status
 from rrxiv.server.deps import get_store
 from rrxiv.server.errors import not_found
 from rrxiv.server.pagination import paginate
@@ -23,7 +24,7 @@ def list_claims(
 ) -> dict[str, Any]:
     store: Store = get_store(request)
     page, next_cursor = paginate(
-        store.list_claims(),
+        [apply_derived_status(c, store) for c in store.list_claims()],
         cursor=cursor,
         limit=limit,
         key=lambda c: (c.get("paper_id") or "", c.get("id") or ""),
@@ -100,7 +101,7 @@ def get_claim(claim_id: str, request: Request) -> dict[str, Any]:
     c = store.get_claim(claim_id)
     if c is None:
         raise not_found(f"claim {claim_id} not found")
-    return c
+    return apply_derived_status(c, store)
 
 
 def _outgoing(store: Store, claim_id: str, field: str, kind: str) -> list[dict[str, str]]:

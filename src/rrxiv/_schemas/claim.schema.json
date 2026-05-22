@@ -77,7 +77,7 @@
       "type": "string",
       "enum": ["untested", "partial", "replicated", "contradicted", "retracted"],
       "default": "untested",
-      "description": "Aggregate replication status. Updated by server based on annotations."
+      "description": "Aggregate replication status. **Server-derived** from annotations per RRP-0019: independent-replication count crosses the per-discipline quorum → `replicated`; contradicting annotations meet or exceed supports → `contradicted`; any non-superseded `claim_retraction` annotation (RRP-0020) → `retracted` (highest precedence). Author-provided values in submitted CIRs are ignored on response; clients should trust the server's derived value."
     },
     "labels": {
       "type": "array",
@@ -120,6 +120,24 @@
     "pdf_anchor": {
       "type": ["string", "null"],
       "description": "URL fragment that pins the rendered PDF to the page (or named destination) where the claim appears. Typically `#page=N` for raw page anchors, or `#nameddest=<id>` when the PDF carries named destinations. Optional; the parser leaves this null because computing the page number requires the rendered PDF cross-reference table (operators or downstream pipelines populate it). Specified here so future generators have a stable place to put it. See RRP-0015."
+    },
+    "reproducibility": {
+      "type": ["object", "null"],
+      "description": "Author-attached reproducibility manifest for this claim. Optional; present when the paper's author publishes a reproduction recipe alongside the source. Distinct from replication annotations posted by external readers (those carry their own `reproducibility_manifest_uri`). The web client surfaces a 'Reproduce this' CTA when this field is populated. See RRP-0019 + reproducibility_manifest.schema.json.",
+      "properties": {
+        "manifest_uri": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of a JSON document conforming to reproducibility_manifest.schema.json. Hosted externally (typically the paper repo's GitHub blob URL at a pinned tag)."
+        },
+        "manifest_hash": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "SHA-256 of the manifest's bytes, allowing clients to detect drift."
+        }
+      },
+      "required": ["manifest_uri"],
+      "additionalProperties": false
     },
     "extracted_by": {
       "type": "string",

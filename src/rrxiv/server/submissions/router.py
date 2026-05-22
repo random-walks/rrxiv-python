@@ -1,8 +1,15 @@
 """Submissions router — POST /submissions, plus paper source +
-versions endpoints (RRP-0008 / OpenAPI alignment)."""
+versions endpoints (RRP-0008 / OpenAPI alignment).
+
+Multipart shape follows ``schema/submission_request.schema.json`` (RRP-0016).
+On revision submission, the response carries an inline ``revision_diff``
+(RRP-0017); on ``dry_run=true``, the server performs validation +
+parse + diff without persisting.
+"""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import uuid
@@ -14,10 +21,11 @@ from fastapi import (
     File,
     Form,
     Header,
+    HTTPException,
     Request,
     UploadFile,
 )
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 from rrxiv.server.deps import AuthedRequest, get_store, require_identity
 from rrxiv.server.errors import (
@@ -26,6 +34,7 @@ from rrxiv.server.errors import (
     not_found,
     validation_error,
 )
+from rrxiv.server.papers.diff import compute_revision_diff
 from rrxiv.server.store import (
     AnonymousIdentity,
     Store,
@@ -38,32 +47,61 @@ router = APIRouter(tags=["Papers"])
 _REQUIRES_NAMED_IDENTITY = require_identity(allow_anonymous=False)
 
 
-@router.post("/submissions", status_code=201)
+@router.post("/submissions")
 async def submit_paper(
     request: Request,
     cir: UploadFile = File(...),
     bundle: UploadFile = File(...),
     previous_version: str | None = Form(default=None),
+    revision_summary: str | None = Form(default=None),
+    dry_run: str | None = Form(default=None),
+    client_compile_hash: str | None = Form(default=None),
     auth: AuthedRequest = Depends(_REQUIRES_NAMED_IDENTITY),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-) -> dict[str, Any]:
-    """Submit a paper.
+) -> JSONResponse:
+    """Submit a paper or revision (RRP-0016).
 
-    The request is multipart/form-data with two file fields:
+    Multipart fields:
 
-    - ``cir``: the client-computed Canonical Intermediate Representation
-      JSON. The server validates it against ``cir.schema.json``.
-    - ``bundle``: the source archive (tar.gz). Persisted to the store
-      and reachable via ``GET /papers/{id}/source``.
+    - ``cir``: client-computed CIR JSON.
+    - ``bundle``: source archive (.tar.gz). Persisted to the store and
+      reachable via ``GET /papers/{id}/source``.
+    - ``previous_version``: paper_id of the prior version (revisions only).
+    - ``revision_summary``: optional plaintext describing the changes;
+      the server synthesises a ``revision_summary`` annotation (RRP-0017).
+    - ``dry_run``: ``"true"`` to validate without persisting (RRP-0016
+      §Dry-run semantics).
+    - ``client_compile_hash``: optional SHA-256 of the bundle bytes.
+      The server recomputes and rejects on mismatch.
 
-    On success the server returns ``{paper_id, retrieval_uri}``.
+    Response on persist (201) or dry-run (200): ``paper_id``,
+    ``id_slug``, ``version``, ``previous_version``, ``retrieval_uri``,
+    optional ``revision_diff``, ``would_persist``, ``dry_run``.
     """
     if isinstance(auth.identity, AnonymousIdentity):
         raise forbidden("anonymous identities cannot submit papers")
 
+    is_dry_run = (dry_run or "").lower() in ("true", "1", "yes")
+
     # Read both files fully into memory. v0.1 reference server scope.
     cir_bytes = await cir.read()
     bundle_bytes = await bundle.read()
+
+    # client_compile_hash check (RRP-0016).
+    if client_compile_hash:
+        actual = hashlib.sha256(bundle_bytes).hexdigest()
+        if actual.lower() != client_compile_hash.lower():
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "bundle_hash_mismatch",
+                    "message": (
+                        "client_compile_hash does not match the SHA-256 of "
+                        f"the uploaded bundle (got {actual}, expected "
+                        f"{client_compile_hash})"
+                    ),
+                },
+            )
 
     # CIR must parse as JSON.
     try:
@@ -112,11 +150,50 @@ async def submit_paper(
         else:
             cir_data["id_slug"] = mint_slug(store)
 
+    # Compute revision_diff for revision submissions (RRP-0017). Done
+    # *before* persisting so dry-runs see it too.
+    revision_diff_payload: dict[str, Any] | None = None
+    if previous_version:
+        prior = store.get_paper(previous_version)
+        if prior is None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "previous_version_not_found",
+                    "message": (
+                        f"previous_version {previous_version!r} does not "
+                        "exist in the corpus"
+                    ),
+                },
+            )
+        prior_cir_raw = store.get_cir(prior["id"]) or dict(prior)
+        prior_cir = CIR.model_validate(prior_cir_raw)
+        # The current paper's metadata for the diff: use what we'll
+        # store, not what the store has (we haven't persisted yet).
+        revision_diff_payload = compute_revision_diff(
+            prior, prior_cir, cir_data, cir_obj
+        )
+
+    # ---- Dry-run short-circuit (RRP-0016) -------------------------
+    if is_dry_run:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "paper_id": None,
+                "id_slug": cir_data.get("id_slug"),
+                "version": cir_data.get("version"),
+                "previous_version": cir_data.get("previous_version"),
+                "revision_diff": revision_diff_payload,
+                "would_persist": True,
+                "dry_run": True,
+            },
+        )
+
     # Idempotency.
     if idempotency_key:
         existing = store.get_idempotency(auth.token, idempotency_key)
         if existing is not None:
-            return existing.response_body
+            return JSONResponse(status_code=201, content=existing.response_body)
 
     paper_metadata = {
         k: v
@@ -127,9 +204,27 @@ async def submit_paper(
     store.add_cir(cir_data)
     source_uri = store.save_source(paper_id, bundle_bytes)
 
+    # Synthesise a revision_summary annotation if the submitter passed
+    # `revision_summary` (RRP-0017). The author can supersede this with
+    # a richer one later.
+    if previous_version and revision_summary:
+        _synthesise_revision_summary_annotation(
+            store=store,
+            new_paper_id=paper_id,
+            previous_version_id=previous_version,
+            summary=revision_summary,
+            identity=auth.identity,
+        )
+
     response_body = {
         "paper_id": paper_id,
+        "id_slug": cir_data.get("id_slug"),
+        "version": cir_data.get("version"),
+        "previous_version": cir_data.get("previous_version"),
         "retrieval_uri": source_uri,
+        "revision_diff": revision_diff_payload,
+        "would_persist": True,
+        "dry_run": False,
     }
 
     if idempotency_key:
@@ -146,7 +241,46 @@ async def submit_paper(
             ),
         )
 
-    return response_body
+    return JSONResponse(status_code=201, content=response_body)
+
+
+def _synthesise_revision_summary_annotation(
+    *,
+    store: Store,
+    new_paper_id: str,
+    previous_version_id: str,
+    summary: str,
+    identity: Any,
+) -> None:
+    """Create a skeleton ``revision_summary`` annotation on the v2
+    paper (RRP-0017). Author can supersede later with structured
+    highlights."""
+    import datetime as dt
+
+    # Identity → created_by — keep the existing shape conventions.
+    if hasattr(identity, "orcid"):
+        created_by = {"identity_type": "orcid", "identity": identity.orcid}
+    elif hasattr(identity, "handle"):
+        created_by = {"identity_type": "agent", "identity": identity.handle}
+    else:
+        # Fallback — should not happen given the auth gate above.
+        created_by = {"identity_type": "agent", "identity": "unknown"}
+
+    annotation = {
+        "id": f"ann-{uuid.uuid4().hex[:10]}",
+        "target_id": new_paper_id,
+        "target_type": "paper",
+        "annotation_type": "revision_summary",
+        "content": summary,
+        "structured_payload": {
+            "previous_version_id": previous_version_id,
+            "summary": summary,
+            "highlights": [],
+        },
+        "created_at": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
+        "created_by": created_by,
+    }
+    store.add_annotation(annotation)
 
 
 def _mint_paper_id() -> str:

@@ -14,11 +14,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
+from rrxiv.models import CIR
 from rrxiv.server.deps import get_store
 from rrxiv.server.errors import not_found
 from rrxiv.server.pagination import paginate
+from rrxiv.server.papers.diff import compute_revision_diff, papers_in_same_lineage
 from rrxiv.server.papers.projection import compute_stats, to_list_item
 from rrxiv.server.papers.scopes import filter_by_scope
 from rrxiv.server.papers.slug import find_paper_by_slug, is_slug
@@ -171,3 +173,94 @@ def get_paper_stats(paper_id: str, request: Request) -> dict[str, Any]:
     if paper is None:
         raise not_found(f"paper {paper_id} not found")
     return compute_stats(paper["id"], store)
+
+
+# ---------- Revision diff endpoint (RRP-0017) ------------------------
+
+
+@router.get("/{paper_id}/diff")
+def get_revision_diff(
+    paper_id: str,
+    request: Request,
+    from_: str = Query(
+        ...,
+        alias="from",
+        description="Paper ID (or slug) of the prior version.",
+    ),
+) -> dict[str, Any]:
+    """Semantic diff between two versions of a paper (RRP-0017).
+
+    Both papers must share a `previous_version` lineage. The `{paper_id}` path
+    parameter is the newer paper; the `from` query parameter is the prior.
+
+    The diff is deterministic — claims are matched by `local_id` first,
+    then by exact statement. Word-level hunks accompany statement + proof
+    changes. The output validates against
+    ``schema/revision_diff.schema.json``.
+    """
+    store: Store = get_store(request)
+    curr = _resolve_paper(store, paper_id)
+    prev = _resolve_paper(store, from_)
+    if curr is None:
+        raise not_found(f"paper {paper_id} not found")
+    if prev is None:
+        raise not_found(f"paper {from_} not found")
+
+    if not papers_in_same_lineage(store.get_paper, prev["id"], curr["id"]):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "papers_not_in_same_lineage",
+                "message": (
+                    f"papers {prev['id']} and {curr['id']} do not share a "
+                    "`previous_version` chain; cannot compute a revision diff"
+                ),
+            },
+        )
+
+    prev_cir_raw = store.get_cir(prev["id"]) or dict(prev)
+    curr_cir_raw = store.get_cir(curr["id"]) or dict(curr)
+    prev_cir = CIR.model_validate(prev_cir_raw)
+    curr_cir = CIR.model_validate(curr_cir_raw)
+
+    return compute_revision_diff(prev, prev_cir, curr, curr_cir)
+
+
+# ---------- Errata listing (RRP-0017) --------------------------------
+
+
+@router.get("/{paper_id}/errata")
+def list_errata(
+    paper_id: str,
+    request: Request,
+    cursor: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+) -> dict[str, Any]:
+    """List erratum annotations for this paper, newest first.
+
+    Convenience over filtering /annotations by target + type. Paginated
+    via cursor.
+    """
+    store: Store = get_store(request)
+    paper = _resolve_paper(store, paper_id)
+    if paper is None:
+        raise not_found(f"paper {paper_id} not found")
+    canonical_id = paper["id"]
+
+    matches = [
+        a
+        for a in store.list_annotations()
+        if a.get("annotation_type") == "erratum"
+        and (
+            a.get("target_id") == canonical_id
+            or str(a.get("target_id", "")).startswith(f"{canonical_id}:")
+        )
+    ]
+    items, next_cursor = paginate(
+        matches,
+        cursor=cursor,
+        limit=limit,
+        key=lambda a: (a.get("created_at") or "", a.get("id") or ""),
+        order="desc",
+    )
+    return {"items": items, "next_cursor": next_cursor}

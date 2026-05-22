@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rrxiv.com/schema/v0/submission_request.schema.json",
+  "title": "SubmissionRequest",
+  "description": "Wire format for POST /api/v0/submissions. Multipart-encoded: the `cir` and `bundle` fields are multipart file parts; the remaining fields are form fields. See spec/0005-submission.md for prose; RRP-0016 for the rationale.",
+  "version": "0.1.0",
+  "type": "object",
+  "required": ["cir", "bundle"],
+  "properties": {
+    "cir": {
+      "type": "string",
+      "contentMediaType": "application/json",
+      "description": "JSON-encoded CIR validating against cir.schema.json. Uploaded as a multipart file part named `cir`. Servers parse the body as JSON and validate."
+    },
+    "bundle": {
+      "type": "string",
+      "contentMediaType": "application/gzip",
+      "description": "Source bundle as a `.tar.gz` file part named `bundle`. Constraints in spec/0005-submission.md §Source bundle format: no symlinks, no executables, ≤100 MB uncompressed, UTF-8, single top-level directory."
+    },
+    "previous_version": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "Paper ID of the prior version when submitting a revision. Server sets `previous_version` on the stored paper to this value; null/absent means this is v1. Server validates that the referenced paper exists and belongs to the same author lineage (or that the submitting identity is on the prior version's author list)."
+    },
+    "revision_summary": {
+      "type": ["string", "null"],
+      "maxLength": 8192,
+      "description": "Optional plaintext summary of changes for a revision submission. When present, the server may auto-generate a `revision_summary` annotation (see RRP-0017) authored by the submitter and attached to the new paper. Authors may add structured `highlights` via a follow-up annotation."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, the server performs all validation + compile + parse + diff steps but does NOT persist the submission. Returns the would-be paper_id (null), would-be id_slug, computed CIR, and any revision_diff. Useful for CI. The Idempotency-Key, if present, is NOT stored — a subsequent real submission with the same key still gets a fresh ID."
+    },
+    "client_compile_hash": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 of the bundle bytes as computed by the submitting client (lowercase hex). Server recomputes and rejects on mismatch (400 with code `bundle_hash_mismatch`). Advisory in v0.x; may become required in v1.0."
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "cir": "{ ...CIR JSON... }",
+      "bundle": "<binary tar.gz>",
+      "dry_run": false
+    },
+    {
+      "cir": "{ ...CIR JSON for v2... }",
+      "bundle": "<binary tar.gz>",
+      "previous_version": "01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f",
+      "revision_summary": "Fixed an off-by-one in the proof of Claim 4; added two new claims about pentagonal numbers; updated abstract.",
+      "client_compile_hash": "a3f5b1c9e2d4f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1"
+    }
+  ]
+}
