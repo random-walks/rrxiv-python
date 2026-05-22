@@ -259,9 +259,9 @@ def _resolve_identity(
         agent_key_record = load_agent_key(server, bearer.identity)
         if not agent_key_record:
             continue
-        signing = AgentSigningKey(
+        signing = AgentSigningKey.from_private_bytes(
             handle=agent_key_record.handle,
-            private_key=agent_key_record.private_key_bytes(),
+            private_key_bytes=agent_key_record.private_key_bytes(),
         )
         return kind, bearer.token, signing
     return None
