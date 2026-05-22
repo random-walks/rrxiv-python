@@ -118,7 +118,27 @@ class OrcidCallbackBody(BaseModel):
 
 
 class OrcidCallbackResponse(BaseModel):
+    """Response shape for ``POST /auth/orcid/callback``.
+
+    Carries both the canonical session fields (``identity``,
+    ``identity_type``, ``display_name``, ``expires_in``) used by web
+    clients and the legacy ``orcid_id`` / ``expires_in_seconds``
+    aliases used by the CLI (RRP-0006-era). Both shapes refer to the
+    same values; clients pick whichever they prefer.
+    """
+
     token: str
+    identity_type: str = "orcid"
+    identity: str
+    """The ORCID iD (``0000-…``). Same value as ``orcid_id`` below."""
+    display_name: str | None = None
+    """Human-readable name from ORCID's token response (the ``name``
+    field), when ORCID returned one. Authors who registered with only
+    an iD won't have this set."""
+    expires_in: int
+    """Token TTL in seconds. Same value as ``expires_in_seconds``."""
+
+    # ---- Backwards-compatible aliases (CLI still reads these) ----
     orcid_id: str
     expires_in_seconds: int
 
@@ -131,7 +151,7 @@ def orcid_callback(
     settings: ServerSettings = request.app.state.settings
     store: Store = request.app.state.store
 
-    orcid_id = _resolve_orcid_id_from_code(
+    orcid_id, display_name = _resolve_orcid_identity_from_code(
         settings, body.code, redirect_uri=body.redirect_uri
     )
 
@@ -142,6 +162,10 @@ def orcid_callback(
     )
     return OrcidCallbackResponse(
         token=token.token,
+        identity_type="orcid",
+        identity=orcid_id,
+        display_name=display_name,
+        expires_in=settings.token_ttl_seconds_orcid,
         orcid_id=orcid_id,
         expires_in_seconds=settings.token_ttl_seconds_orcid,
     )
@@ -198,7 +222,28 @@ def _resolve_orcid_id_from_code(
     *,
     redirect_uri: str | None = None,
 ) -> str:
+    """Backwards-compatible wrapper — returns the iD only.
+
+    Newer callers should prefer :func:`_resolve_orcid_identity_from_code`
+    which returns ``(orcid_id, display_name)`` in one call.
+    """
+    orcid_id, _name = _resolve_orcid_identity_from_code(
+        settings, code, redirect_uri=redirect_uri
+    )
+    return orcid_id
+
+
+def _resolve_orcid_identity_from_code(
+    settings: ServerSettings,
+    code: str,
+    *,
+    redirect_uri: str | None = None,
+) -> tuple[str, str | None]:
     """Either accept a dev code or call orcid.org's token endpoint.
+
+    Returns ``(orcid_id, display_name)``. ``display_name`` is the
+    ``name`` field from ORCID's token response when present (authors
+    who registered with a name) and ``None`` otherwise.
 
     Configuration:
 
@@ -212,7 +257,7 @@ def _resolve_orcid_id_from_code(
     Raises :class:`ProblemError` on any failure.
     """
     if settings.dev_mode and code.startswith("dev-"):
-        return settings.orcid_dev_id
+        return settings.orcid_dev_id, None
 
     if not (settings.orcid_client_id and settings.orcid_client_secret):
         raise bad_request(
@@ -253,7 +298,12 @@ def _resolve_orcid_id_from_code(
         raise unauthorized(
             "ORCID token response missing 'orcid' field"
         )
-    return str(orcid)
+    # ORCID's token response also carries `name` for authors who
+    # registered with one; pass it through so the web client can show
+    # a friendly display name in the session widget.
+    raw_name = body.get("name")
+    display_name = str(raw_name).strip() if raw_name else None
+    return str(orcid), (display_name or None)
 
 
 class OrcidPasteBody(BaseModel):
@@ -282,6 +332,10 @@ def orcid_exchange_paste(
     )
     return OrcidCallbackResponse(
         token=token.token,
+        identity_type="orcid",
+        identity=entry.orcid_id,
+        display_name=None,  # paste-flow doesn't carry a name
+        expires_in=settings.token_ttl_seconds_orcid,
         orcid_id=entry.orcid_id,
         expires_in_seconds=settings.token_ttl_seconds_orcid,
     )

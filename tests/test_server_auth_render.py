@@ -206,6 +206,91 @@ def test_orcid_callback_uses_redirect_uri_from_body(
     )
 
 
+def test_orcid_callback_response_shape_has_identity_and_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Response carries ``identity``, ``identity_type``, ``display_name``,
+    ``expires_in`` (canonical) AND ``orcid_id``, ``expires_in_seconds``
+    (legacy aliases).
+
+    The web client reads the canonical fields; the CLI reads the
+    legacy ones. Both must work.
+    """
+    settings = ServerSettings(
+        dev_mode=False,
+        orcid_client_id="test-client",
+        orcid_client_secret="test-secret",
+        orcid_redirect_uri="https://rrxiv.com/api/auth/orcid/callback",
+    )
+
+    def fake_post(url: str, *, data: Any = None, **kwargs: Any) -> Any:
+        class _Resp:
+            status_code = 200
+            text = ""
+
+            def json(self) -> dict[str, Any]:
+                return {
+                    "access_token": "x",
+                    "orcid": "0000-0001-2345-6789",
+                    "name": "Alice Researcher",
+                    "token_type": "bearer",
+                }
+
+        return _Resp()
+
+    monkeypatch.setattr("httpx.post", fake_post)
+
+    _, sync = _client(settings)
+    with sync as c:
+        resp = c.post(
+            "/auth/orcid/callback",
+            json={"code": "real", "state": "s"},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    # Canonical web-facing fields
+    assert body["identity"] == "0000-0001-2345-6789"
+    assert body["identity_type"] == "orcid"
+    assert body["display_name"] == "Alice Researcher"
+    assert isinstance(body["expires_in"], int) and body["expires_in"] > 0
+    # Legacy aliases (CLI still reads these)
+    assert body["orcid_id"] == "0000-0001-2345-6789"
+    assert body["expires_in_seconds"] == body["expires_in"]
+    assert body["token"]
+
+
+def test_orcid_callback_display_name_optional_when_orcid_omits_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ORCID doesn't always return ``name`` — author may have only an iD."""
+    settings = ServerSettings(
+        dev_mode=False,
+        orcid_client_id="test-client",
+        orcid_client_secret="test-secret",
+    )
+
+    def fake_post(url: str, *, data: Any = None, **kwargs: Any) -> Any:
+        class _Resp:
+            status_code = 200
+            text = ""
+
+            def json(self) -> dict[str, Any]:
+                return {"orcid": "0000-0001-2345-6789"}  # no name
+
+        return _Resp()
+
+    monkeypatch.setattr("httpx.post", fake_post)
+
+    _, sync = _client(settings)
+    with sync as c:
+        resp = c.post(
+            "/auth/orcid/callback",
+            json={"code": "real", "state": "s"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["display_name"] is None
+
+
 def test_orcid_callback_falls_back_to_env_redirect_uri(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
