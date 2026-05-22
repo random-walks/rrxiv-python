@@ -225,6 +225,38 @@ def test_list_papers_scope_filter() -> None:
     assert contested_resp.json()["items"] == []
 
 
+def test_list_papers_hides_superseded_versions_by_default() -> None:
+    """Per RRP-0017, the listing returns one row per lineage.
+
+    When v2 of a paper exists with ``previous_version=v1.id``, the
+    listing should show v2 and hide v1 (the head-of-lineage rule).
+    Audit views can opt in via ``?include_superseded=1``.
+    """
+    app, transport = _build_app_and_transport()
+
+    v1 = _paper("paper-v1")
+    v2 = _paper("paper-v2")
+    v2["previous_version"] = "paper-v1"
+    # Unrelated paper — should always show.
+    other = _paper("other")
+
+    app.state.store.add_paper(v1)
+    app.state.store.add_paper(v2)
+    app.state.store.add_paper(other)
+
+    with httpx.Client(transport=transport, base_url="http://test/api/v0") as c:
+        default_resp = c.get("/papers")
+        archival_resp = c.get("/papers", params={"include_superseded": "true"})
+
+    default_ids = {i["id"] for i in default_resp.json()["items"]}
+    archival_ids = {i["id"] for i in archival_resp.json()["items"]}
+
+    # Default: v1 hidden because v2 supersedes it. v2 + other shown.
+    assert default_ids == {"paper-v2", "other"}, default_ids
+    # Archival: all three versions visible.
+    assert archival_ids == {"paper-v1", "paper-v2", "other"}, archival_ids
+
+
 def test_paper_detail_include_stats() -> None:
     app, transport = _build_app_and_transport()
     app.state.store.add_paper(_paper("p1"))

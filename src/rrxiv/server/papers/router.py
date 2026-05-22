@@ -58,9 +58,33 @@ def list_papers(
         le=200,
         description="Maximum items per page. Defaults to 50.",
     ),
+    include_superseded: bool = Query(
+        False,
+        description=(
+            "Include older versions in the listing. Defaults to False — "
+            "the listing returns one row per lineage (the head, i.e. the "
+            "latest version per RRP-0017 ``previous_version`` chain). "
+            "Set to True for archival / audit views that need every "
+            "version individually."
+        ),
+    ),
 ) -> dict[str, Any]:
     store: Store = get_store(request)
-    items = [to_list_item(p, store) for p in store.list_papers()]
+    all_papers = list(store.list_papers())
+
+    if not include_superseded:
+        # Drop papers that are pointed to by another paper's
+        # `previous_version` — they're an older version of something
+        # else in the corpus. Per RRP-0017 the lineage forms a chain,
+        # so this removes exactly the non-head rows.
+        superseded_ids: set[str] = set()
+        for p in all_papers:
+            prev = p.get("previous_version")
+            if isinstance(prev, str) and prev:
+                superseded_ids.add(prev)
+        all_papers = [p for p in all_papers if p.get("id") not in superseded_ids]
+
+    items = [to_list_item(p, store) for p in all_papers]
 
     if topic:
         items = [
