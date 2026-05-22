@@ -128,6 +128,52 @@ def test_compute_stats_contested_mixed() -> None:
     assert stats["status"] == "contested"
 
 
+def test_compute_stats_partial_not_contested() -> None:
+    """Regression: a paper whose only annotated claims have ``partial``
+    status (1 replication, no contradiction) must NOT roll up to
+    ``contested``. Earlier the projection counted partial claims into
+    the contested bucket, so Euclid (0 contradictions, 3 partials)
+    surfaced as ``status='contested'`` on the home page.
+
+    With the new mapping a paper with partials + no contradicts rolls
+    up to ``partial``; ``contested`` is reserved for genuine mixed
+    evidence.
+    """
+    store = MemoryStore()
+    store.add_paper(_paper("p1"))
+    store.add_claim(_claim("p1:c1", "p1", status="partial"))
+    store.add_claim(_claim("p1:c2", "p1", status="untested"))
+
+    stats = compute_stats("p1", store)
+    assert stats["partial"] == 1
+    assert stats["contested"] == 0, (
+        "partial claims must not be counted under contested"
+    )
+    assert stats["contradicted"] == 0
+    assert stats["status"] == "partial", (
+        "paper-level status must be 'partial' not 'contested' when "
+        "only partials + untesteds exist"
+    )
+
+
+def test_compute_stats_replicated_with_partials_rolls_up_to_replicated() -> None:
+    """A paper where most claims are replicated and a few are partial
+    rolls up to 'replicated' (the per-claim partials don't downgrade
+    the paper). Euclid's reality: 462 replicated + 3 partial + 0
+    contradicted should be 'replicated', not 'contested'.
+    """
+    store = MemoryStore()
+    store.add_paper(_paper("p1"))
+    store.add_claim(_claim("p1:c1", "p1", status="replicated"))
+    store.add_claim(_claim("p1:c2", "p1", status="replicated"))
+    store.add_claim(_claim("p1:c3", "p1", status="partial"))
+
+    stats = compute_stats("p1", store)
+    assert stats["replicated"] == 2
+    assert stats["partial"] == 1
+    assert stats["status"] == "replicated"
+
+
 def test_compute_stats_retracted() -> None:
     store = MemoryStore()
     store.add_paper(_paper("p1"))

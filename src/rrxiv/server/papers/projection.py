@@ -28,23 +28,41 @@ def compute_stats(paper_id: str, store: Store) -> dict[str, Any]:
         {
           "claims": int,
           "replicated": int,
+          "partial": int,
           "contradicted": int,
           "contested": int,
           "untested": int,
-          "status": "preprint" | "untested" | "replicated" | "contested" | "retracted",
+          "status": "preprint" | "untested" | "partial" | "replicated"
+                    | "contested" | "retracted",
           "computed_at": ISO-8601 datetime
         }
 
+    The per-claim ``replication_status`` enum (RRP-0019) is
+    ``{untested, partial, replicated, contradicted, retracted}`` —
+    note there is no ``contested`` at the claim level. ``partial``
+    means "has supporting replications below the discipline quorum"
+    and is distinct from ``contested`` ("the corpus contains a
+    genuine mix of supports and contradicts").
+
+    Earlier versions of this projection conflated ``partial`` claims
+    into the ``contested`` count, so a paper with N partials and 0
+    contradicts surfaced as ``status='contested'`` on the home page
+    even though no one had filed a contradiction. ``partial`` now
+    has its own bucket; the paper-level ``contested`` status only
+    fires when both a replication and a contradiction landed
+    somewhere in the paper.
+
     Per-claim ``replication_status`` is **derived server-side** from
-    annotations (RRP-0019, RRP-0020) — the value persisted on the claim
-    is advisory only. See RRP-0012 for the paper-level status rollup
-    rules.
+    annotations (RRP-0019, RRP-0020) — the value persisted on the
+    claim is advisory only. See RRP-0012 for the paper-level status
+    rollup rules.
     """
     # Claim aggregates ---------------------------------------------------
     claims = [c for c in store.list_claims() if c.get("paper_id") == paper_id]
     replicated = 0
+    partial = 0
     contradicted = 0
-    contested = 0
+    retracted_claims = 0
     untested = 0
     for claim in claims:
         cid = claim.get("id")
@@ -57,12 +75,13 @@ def compute_stats(paper_id: str, store: Store) -> dict[str, Any]:
         )
         if rs == "replicated":
             replicated += 1
+        elif rs == "partial":
+            partial += 1
         elif rs == "contradicted":
             contradicted += 1
-        elif rs == "partial":
-            contested += 1
+        elif rs == "retracted":
+            retracted_claims += 1
         else:
-            # "untested" / "retracted" / unset
             untested += 1
 
     # Annotations ---------------------------------------------------------
@@ -81,27 +100,52 @@ def compute_stats(paper_id: str, store: Store) -> dict[str, Any]:
     )
 
     # Paper-level status rollup -------------------------------------------
+    #
+    # Precedence (highest first):
+    #   1. retracted   — paper-level retraction annotation
+    #   2. contested   — genuine mixed evidence (at least one
+    #                    contradiction AND at least one replication)
+    #   3. contradicted — contradictions exist, no replication landed yet
+    #   4. replicated  — at least one fully-replicated claim, no
+    #                    contradictions
+    #   5. partial     — supports below quorum, no contradictions
+    #   6. untested    — claims exist, some discourse but no replication
+    #                    evidence
+    #   7. preprint    — no claims OR no annotations at all
     if is_retracted:
         status = "retracted"
-    elif (
-        len(claims) == 0
-        or (replicated == 0 and contradicted == 0 and contested == 0 and not has_any_annotation)
+    elif len(claims) == 0 or (
+        replicated == 0
+        and partial == 0
+        and contradicted == 0
+        and not has_any_annotation
     ):
         status = "preprint"
-    elif replicated == 0 and contradicted == 0 and contested == 0:
-        # Claims exist, all untested, but annotations have been filed —
-        # the discourse is non-empty even if nothing is replicated yet.
-        status = "untested"
-    elif replicated > 0 and contradicted == 0 and contested == 0:
-        status = "replicated"
-    else:
-        # Any mix of replicated + non-replicated evidence, or
-        # contradictions without replications.
+    elif contradicted > 0 and replicated > 0:
         status = "contested"
+    elif contradicted > 0:
+        status = "contradicted"
+    elif replicated > 0:
+        status = "replicated"
+    elif partial > 0:
+        status = "partial"
+    else:
+        # Claims exist, no replication evidence yet, but the discourse
+        # is non-empty (comments, summaries, extensions).
+        status = "untested"
+
+    # ``contested`` count: number of claims with mixed evidence on the
+    # claim itself. Per-claim derivation doesn't surface a "contested"
+    # state currently (claims resolve to contradicted / replicated /
+    # partial), so this stays 0 unless future schema work splits it
+    # out. Kept in the output for forward-compat + so the wire shape
+    # doesn't break existing consumers.
+    contested = 0
 
     return {
         "claims": len(claims),
         "replicated": replicated,
+        "partial": partial,
         "contradicted": contradicted,
         "contested": contested,
         "untested": untested,
