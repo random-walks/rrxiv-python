@@ -24,6 +24,31 @@ router = APIRouter(prefix="/snapshots", tags=["Snapshots"])
 _REQUIRES_NAMED = require_identity(allow_anonymous=False)
 
 
+@router.get("")
+def list_snapshots(request: Request) -> dict[str, Any]:
+    """Return all known snapshot manifests, newest first.
+
+    The store's snapshot index is append-only — published snapshots are
+    immutable per the protocol — so consumers can reliably paginate or
+    diff against this list. Each item carries ``snapshot_id``,
+    ``created_at_unix``, ``content_digest``, ``size_bytes``,
+    ``counts`` (papers/claims/annotations), and ``blob_uri``.
+    """
+    store: Store = get_store(request)
+    items: list[dict[str, Any]] = []
+    if hasattr(store, "list_snapshots"):
+        items = list(store.list_snapshots())
+    else:
+        latest = store.latest_snapshot()
+        if latest is not None:
+            items = [latest]
+    items.sort(
+        key=lambda m: m.get("created_at_unix") or 0,
+        reverse=True,
+    )
+    return {"items": items, "next_cursor": None}
+
+
 @router.get("/latest")
 def latest_snapshot(request: Request) -> dict[str, Any]:
     store: Store = get_store(request)
