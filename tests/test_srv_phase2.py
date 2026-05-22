@@ -678,3 +678,58 @@ def test_submit_unknown_previous_version_is_400() -> None:
     sync.close()
     assert resp.status_code == 400
     assert resp.json()["detail"]["code"] == "previous_version_not_found"
+
+
+def test_submit_revision_with_same_cir_id_mints_fresh_paper_id() -> None:
+    """Regression: a CIR whose ``id`` matches ``previous_version`` would
+    overwrite the predecessor + introduce a self-loop in the lineage
+    (paper.id == paper.previous_version). The server now mints a fresh
+    paper_id in this case so each version gets a distinct row.
+    """
+    app, sync = _client_with_orcid_bearer()
+
+    v1 = _paper("collision-v1")
+    v1["claims"] = [_claim("collision-v1:c1", "collision-v1")]
+    resp1 = _submit(sync, v1, b"v1 bundle")
+    assert resp1.status_code == 201, resp1.text
+
+    # CIR for v2 carries the SAME id as v1 (a re-submit of the same
+    # paper repo where \rrxivid{} didn't change).
+    v2 = _paper("collision-v1", version="v2", previous_version="collision-v1")
+    v2["claims"] = [_claim("collision-v1:c1", "collision-v1", statement="Updated.")]
+    resp2 = _submit(
+        sync,
+        v2,
+        b"v2 bundle",
+        previous_version="collision-v1",
+    )
+    sync.close()
+    assert resp2.status_code == 201, resp2.text
+    body = resp2.json()
+    assert body["paper_id"] != "collision-v1", (
+        "server must mint a fresh paper_id when CIR's id collides with "
+        "previous_version, not overwrite v1 + create a self-loop"
+    )
+    assert body["previous_version"] == "collision-v1"
+    # Both rows must still exist in the store.
+    assert app.state.store.get_paper("collision-v1") is not None
+    assert app.state.store.get_paper(body["paper_id"]) is not None
+
+
+def test_paper_versions_endpoint_cycle_safe() -> None:
+    """A pathological self-loop (paper.id == paper.previous_version)
+    in the store must not hang the versions walker — earlier code
+    looped forever and 502'd the endpoint.
+    """
+    app, sync = _client_with_orcid_bearer()
+
+    selfloop = _paper("selfloop")
+    selfloop["previous_version"] = "selfloop"
+    app.state.store.add_paper(selfloop)
+
+    resp = sync.get("/papers/selfloop/versions")
+    sync.close()
+    assert resp.status_code == 200
+    chain = resp.json()["items"]
+    assert len(chain) == 1
+    assert chain[0]["id"] == "selfloop"
