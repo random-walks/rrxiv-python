@@ -138,3 +138,72 @@ def test_validation_error_propagates() -> None:
     # Force an invalid CIR by passing a truly malformed dict via the model.
     with pytest.raises(ValidationError):
         CIR.model_validate({"id": "x"})  # missing many required fields
+
+
+def test_author_thanks_stripped_and_deduped(tmp_path: Path) -> None:
+    """``\\thanks{...}`` is stripped from author names; duplicates merge.
+
+    Regression coverage for the Euclid bug: the .tex declared
+    ``\\author{Blaise Albis-Burdige\\thanks{albisburdige@protonmail.com}}``
+    and the parser round-tripped the ``\\thanks`` literally into the CIR.
+    On read paths (``GET /authors``) the same author then appeared twice:
+    once with the thanks suffix, once without. After the fix, the author
+    is normalised once and dedup'd.
+    """
+    tex = tmp_path / "p.tex"
+    sidecar = tmp_path / "p.rrxiv.aux"
+    tex.write_text(
+        r"\documentclass{rrxiv}"
+        "\n"
+        r"\title{T}"
+        "\n"
+        r"\author{Blaise Albis-Burdige\thanks{\texttt{albisburdige@protonmail.com}}}"
+        "\n"
+        r"\author{Claude}"
+        "\n"
+        r"\begin{document}"
+        "\n"
+        r"\begin{abstract}A.\end{abstract}"
+        "\n"
+        r"\end{document}"
+        "\n"
+    )
+    sidecar.write_text(
+        "RRXIV:meta:id:test-thanks\n"
+        "RRXIV:meta:version:v1\n"
+        "RRXIV:meta:protocol:0.1.0\n"
+        "RRXIV:meta:license:CC-BY-4.0\n"
+    )
+    cir = build_cir(tex)
+    names = [a.name for a in cir.authors]
+    assert names == ["Blaise Albis-Burdige", "Claude"], names
+
+
+def test_author_duplicate_within_paper_dedup(tmp_path: Path) -> None:
+    """If the .tex repeats ``\\author{Same}``, the second is dropped."""
+    tex = tmp_path / "p.tex"
+    sidecar = tmp_path / "p.rrxiv.aux"
+    tex.write_text(
+        r"\documentclass{rrxiv}"
+        "\n"
+        r"\title{T}"
+        "\n"
+        r"\author{Alice}"
+        "\n"
+        r"\author{Alice}"
+        "\n"
+        r"\begin{document}"
+        "\n"
+        r"\begin{abstract}A.\end{abstract}"
+        "\n"
+        r"\end{document}"
+        "\n"
+    )
+    sidecar.write_text(
+        "RRXIV:meta:id:test-dup\n"
+        "RRXIV:meta:version:v1\n"
+        "RRXIV:meta:protocol:0.1.0\n"
+        "RRXIV:meta:license:CC-BY-4.0\n"
+    )
+    cir = build_cir(tex)
+    assert [a.name for a in cir.authors] == ["Alice"]
