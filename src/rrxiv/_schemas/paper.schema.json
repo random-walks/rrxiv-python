@@ -122,17 +122,18 @@
         },
         "uri": {
           "type": "string",
-          "format": "uri",
-          "description": "URI to retrieve the source bundle (tar.gz containing all source files and figures)."
+          "format": "uri-reference",
+          "description": "URI to retrieve the source bundle (tar.gz containing all source files and figures). May be absolute (e.g. `https://example.org/p.tar.gz`) for off-instance sources or relative (e.g. `/api/v0/papers/<id>/source`) for the canonical case where the bundle is served by the rrxiv host that emitted the CIR — keeping CIRs portable across instances."
         },
         "rendered_pdf_uri": {
           "type": ["string", "null"],
-          "format": "uri",
-          "description": "URI to the rendered PDF, if available."
+          "format": "uri-reference",
+          "description": "URI to the rendered PDF, if available. Same absolute-or-relative convention as `uri`."
         },
         "rendered_html_uri": {
           "type": ["string", "null"],
-          "format": "uri"
+          "format": "uri-reference",
+          "description": "URI to a server-rendered HTML view of the paper, if available. Same absolute-or-relative convention as `uri`."
         },
         "compile_hash": {
           "type": ["string", "null"],
