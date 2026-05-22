@@ -540,13 +540,19 @@ def get_paper_pdf(paper_id: str, request: Request) -> Response:
 def get_paper_versions(paper_id: str, request: Request) -> dict[str, Any]:
     """Return the chain of versions for ``paper_id`` ordered oldest-first.
 
+    Accepts either a canonical ``paper_id`` (e.g. ``paper-abc123``) or
+    an ``id_slug`` (e.g. ``rrxiv:2605.00001``). For slug input, the
+    lookup goes through ``_resolve`` which already does slug → head
+    resolution; the resulting head paper is used as the chain's tip
+    + the walker traces ``previous_version`` backward from there.
+
     Walks ``previous_version`` pointers in the in-memory paper records.
     Cycle-safe: tracks visited ids so a self-referential or cyclic
     ``previous_version`` chain (which a buggy submit-flow could
     produce) returns the truncated chain instead of looping forever.
     """
     store: Store = get_store(request)
-    paper = store.get_paper(paper_id)
+    paper = _resolve(paper_id, store)
     if paper is None:
         raise not_found(f"paper {paper_id} not found")
 
