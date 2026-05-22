@@ -130,6 +130,16 @@ async def submit_paper(
     # authority on paper IDs for new submissions; we honour client IDs
     # only for the revision-of path.
     paper_id = cir_obj.id or _mint_paper_id()
+
+    # Collision guard: each version must have a UNIQUE paper_id. If the
+    # CIR's id matches the previous_version, the new revision would
+    # overwrite its predecessor and introduce a self-loop in the
+    # lineage chain (paper.id == paper.previous_version). Mint a fresh
+    # paper_id instead — the slug stays stable across versions (per
+    # RRP-0013), only the per-version internal id changes.
+    if previous_version and paper_id == previous_version:
+        paper_id = _mint_paper_id()
+
     cir_data["id"] = paper_id
     if previous_version:
         cir_data["previous_version"] = previous_version
@@ -514,27 +524,36 @@ def get_paper_versions(paper_id: str, request: Request) -> dict[str, Any]:
     """Return the chain of versions for ``paper_id`` ordered oldest-first.
 
     Walks ``previous_version`` pointers in the in-memory paper records.
+    Cycle-safe: tracks visited ids so a self-referential or cyclic
+    ``previous_version`` chain (which a buggy submit-flow could
+    produce) returns the truncated chain instead of looping forever.
     """
     store: Store = get_store(request)
     paper = store.get_paper(paper_id)
     if paper is None:
         raise not_found(f"paper {paper_id} not found")
 
-    # Walk forward and backward to find the head + tail of the chain.
-    # We expose the chain rooted at the queried paper for simplicity.
+    # Walk backward via previous_version. Bounded by `visited` so a
+    # self-loop (paper.previous_version == paper.id) or an arbitrary
+    # cycle terminates after one pass through each node.
     chain: list[dict[str, Any]] = []
+    visited: set[str] = set()
     cur: dict[str, Any] | None = paper
     while cur is not None:
+        cur_id = cur.get("id")
+        if not cur_id or cur_id in visited:
+            break
+        visited.add(cur_id)
         chain.append(
             {
-                "id": cur["id"],
+                "id": cur_id,
                 "version": cur.get("version"),
                 "submitted_at": cur.get("submitted_at"),
                 "previous_version": cur.get("previous_version"),
             }
         )
         prev_id = cur.get("previous_version")
-        if not prev_id:
+        if not prev_id or prev_id == cur_id:
             break
         cur = store.get_paper(prev_id)
     chain.reverse()
