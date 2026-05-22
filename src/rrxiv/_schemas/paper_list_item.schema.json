@@ -13,7 +13,7 @@
   "$defs": {
     "Stats": {
       "type": "object",
-      "required": ["claims", "replicated", "contradicted", "contested", "untested", "status", "computed_at"],
+      "required": ["claims", "replicated", "partial", "contradicted", "contested", "untested", "status", "computed_at"],
       "properties": {
         "claims": {
           "type": "integer",
@@ -25,6 +25,11 @@
           "minimum": 0,
           "description": "Count of claims with replication_status='replicated'."
         },
+        "partial": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of claims with replication_status='partial' (has supporting replications but below the discipline quorum)."
+        },
         "contradicted": {
           "type": "integer",
           "minimum": 0,
@@ -33,7 +38,7 @@
         "contested": {
           "type": "integer",
           "minimum": 0,
-          "description": "Count of claims with replication_status='partial' (mixed evidence)."
+          "description": "Count of claims with genuinely mixed evidence (both supports and contradicts on the same claim). The per-claim derivation in v0.x doesn't surface this state — claims resolve to contradicted/replicated/partial individually — so this count stays 0 today; reserved for future schema work."
         },
         "untested": {
           "type": "integer",
@@ -42,8 +47,8 @@
         },
         "status": {
           "type": "string",
-          "enum": ["preprint", "untested", "replicated", "contested", "retracted"],
-          "description": "Paper-level rollup. 'preprint' = no annotations yet. 'untested' = annotations exist but no replications/contradictions. 'replicated' = replications without contradictions or partials. 'contested' = any mix of replications + non-replication evidence, or contradictions without replications. 'retracted' = paper has a retraction erratum."
+          "enum": ["preprint", "untested", "partial", "replicated", "contradicted", "contested", "retracted"],
+          "description": "Paper-level rollup. Precedence: 'retracted' (paper-level retraction erratum) > 'contested' (mixed evidence: at least one replicated claim AND at least one contradicted claim) > 'contradicted' (contradictions, no replications) > 'replicated' (at least one replicated claim, no contradictions) > 'partial' (supports below quorum, no contradictions) > 'untested' (claims + discourse but no replication evidence) > 'preprint' (no claims OR no annotations)."
         },
         "computed_at": {
           "type": "string",
@@ -78,10 +83,11 @@
       "stats": {
         "claims": 7,
         "replicated": 2,
+        "partial": 1,
         "contradicted": 0,
-        "contested": 1,
+        "contested": 0,
         "untested": 4,
-        "status": "contested",
+        "status": "replicated",
         "computed_at": "2026-05-18T14:00:00Z"
       }
     }
