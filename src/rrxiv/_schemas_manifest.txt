@@ -2,9 +2,9 @@
 
 Synced from: /Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv-python/../rrxiv/schema
 Source repo: /Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv
-Branch:      feat/meaty-claims-schema
-Commit:      b50311d09f0dd9fe0114a552b9f4313bde8cb10d
-Synced at:   2026-05-20T22:42:05Z
+Branch:      main
+Commit:      8fb05cb5714917d299b8a58f4d6dc4e32bf1dfc0
+Synced at:   2026-05-22T15:50:53Z
 
 Files:
   - annotation.schema.json
@@ -14,6 +14,9 @@ Files:
   - figure.schema.json
   - paper.schema.json
   - paper_list_item.schema.json
+  - reproducibility_manifest.schema.json
+  - revision_diff.schema.json
   - section.schema.json
+  - submission_request.schema.json
 
 Run scripts/regen_models.sh to regenerate pydantic models from these.

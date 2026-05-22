@@ -32,6 +32,7 @@ from rrxiv.server.errors import (
     not_found,
     validation_error,
 )
+from rrxiv.server.annotations.threads import list_direct_replies, validate_in_reply_to
 from rrxiv.server.pagination import paginate
 from rrxiv.server.store import (
     AnonymousIdentity,
@@ -107,6 +108,28 @@ def get_annotation(ann_id: str, request: Request) -> dict[str, Any]:
     return a
 
 
+@router.get("/{ann_id}/replies")
+def get_annotation_replies(
+    ann_id: str,
+    request: Request,
+    cursor: str | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=200),
+) -> dict[str, Any]:
+    """Direct replies (``in_reply_to == ann_id``), oldest first (RRP-0018)."""
+    store: Store = get_store(request)
+    if store.get_annotation(ann_id) is None:
+        raise not_found(f"annotation {ann_id} not found")
+    items = list_direct_replies(store, ann_id)
+    page, next_cursor = paginate(
+        items,
+        cursor=cursor,
+        limit=limit,
+        key=lambda a: (a.get("created_at") or "", a.get("id") or ""),
+        order="asc",
+    )
+    return {"items": page, "next_cursor": next_cursor}
+
+
 class _IncomingAnnotation(BaseModel):
     """Loose schema — the rrxiv Annotation pydantic model is exhaustive
     but we want the server to be permissive about evolving fields."""
@@ -174,6 +197,10 @@ async def create_annotation(
     elif target_type == "paper":
         if not isinstance(target_id, str) or store.get_paper(target_id) is None:
             raise not_found(f"paper {target_id} not found")
+
+    # Threading (RRP-0018): in_reply_to must exist, share an artefact,
+    # and not be a self-reply.
+    validate_in_reply_to(store, body)
 
     store.add_annotation(body)
 

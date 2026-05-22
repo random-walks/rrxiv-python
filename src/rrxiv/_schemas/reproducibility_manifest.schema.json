@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rrxiv.com/schema/v0/reproducibility_manifest.schema.json",
+  "title": "ReproducibilityManifest",
+  "description": "A small JSON file co-located with a paper's or replicator's code, describing the runtime environment and how to reproduce a claim. Linked from `replication` annotations via `reproducibility_manifest_uri` and from author-attached claim fields via `claim.reproducibility.manifest_uri`. See RRP-0019 for design rationale.",
+  "version": "0.1.0",
+  "type": "object",
+  "required": ["version", "claim_uri", "environment", "entrypoint"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Manifest schema version. Pinned to 1.0 for v0.x."
+    },
+    "title": {
+      "type": ["string", "null"],
+      "description": "Human-readable title for the manifest (e.g. 'Reproduction of Claim I.47')."
+    },
+    "claim_uri": {
+      "type": "string",
+      "format": "uri",
+      "description": "Canonical URI of the claim this manifest reproduces. Typically https://rrxiv.com/claims/<claim_id>."
+    },
+    "environment": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Container or environment kind. v0.x recommends `docker`; the field is an open string so future manifests can add `conda`, `nix`, `modal`, etc."
+        },
+        "image": {
+          "type": ["string", "null"],
+          "description": "Container image reference (e.g. `ghcr.io/example/repro:abc123`). Required when kind=docker."
+        },
+        "digest": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Content-addressable digest of the image. Strongly recommended."
+        },
+        "platform": {
+          "type": ["string", "null"],
+          "description": "Target platform (e.g. `linux/amd64`)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "data": {
+      "type": ["object", "null"],
+      "description": "Input data needed to run the reproduction. Optional — many reproductions have no external data.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["url", "git", "huggingface", "s3", "ipfs", "inline"]
+        },
+        "uri": {
+          "type": "string",
+          "format": "uri"
+        },
+        "hash": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "ref": {
+          "type": ["string", "null"],
+          "description": "Git ref / HF revision / S3 version-ID when applicable."
+        }
+      },
+      "additionalProperties": false
+    },
+    "entrypoint": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Command to invoke inside the environment (e.g. `python run.py --seed 0`). Convention: deterministic; running it twice should produce identical `expected_outputs`."
+    },
+    "expected_outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": { "type": "string", "description": "Output path relative to the workspace inside the container." },
+          "hash": {
+            "type": ["string", "null"],
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "Expected SHA-256 of the file's bytes for byte-deterministic reproductions."
+          },
+          "description": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "description": "Files (and optionally their hashes) the entrypoint is expected to produce. Empty for reproductions that only assert non-byte-level outcomes (e.g. plotted figures judged visually)."
+    },
+    "estimated_runtime_minutes": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Rough runtime estimate so a reproducer can decide whether to run."
+    },
+    "estimated_cost_usd": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Rough cost estimate in USD (cloud-compute back-of-napkin)."
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "Free-form prose for nuances the structured fields can't capture."
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "version": "1.0",
+      "title": "Reproduction of Proposition I.1 (equilateral triangle construction)",
+      "claim_uri": "https://rrxiv.com/claims/01923f8e-0009-7c4d-9e1f-3a2b1c0d4e5f:prop:I.1",
+      "environment": {
+        "kind": "docker",
+        "image": "ghcr.io/example/euclid-coq:lean4-1.0",
+        "digest": "sha256:abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
+        "platform": "linux/amd64"
+      },
+      "entrypoint": "lake build EuclidI1",
+      "expected_outputs": [
+        { "path": "build/EuclidI1.olean", "description": "Compiled Lean proof object." }
+      ],
+      "estimated_runtime_minutes": 3,
+      "estimated_cost_usd": 0.01
+    },
+    {
+      "version": "1.0",
+      "title": "Reproduction of paper §4 ablation",
+      "claim_uri": "https://rrxiv.com/claims/01923ff1-…:claim:4-ablation",
+      "environment": {
+        "kind": "docker",
+        "image": "ghcr.io/example/repro-paper:abc123",
+        "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "data": {
+        "kind": "huggingface",
+        "uri": "https://huggingface.co/datasets/example/repro-paper",
+        "ref": "v1.0",
+        "hash": "sha256:1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff"
+      },
+      "entrypoint": "python -m repro.run --seed 0 --config configs/section4.yaml",
+      "expected_outputs": [
+        { "path": "results/ablation.csv", "hash": "sha256:1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd" }
+      ],
+      "estimated_runtime_minutes": 240,
+      "estimated_cost_usd": 12.5
+    }
+  ]
+}

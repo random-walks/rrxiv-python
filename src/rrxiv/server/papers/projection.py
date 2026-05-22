@@ -14,6 +14,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from rrxiv.server.claims.replication import derive_replication_status
+
 if TYPE_CHECKING:
     from rrxiv.server.store import Store
 
@@ -33,7 +35,10 @@ def compute_stats(paper_id: str, store: Store) -> dict[str, Any]:
           "computed_at": ISO-8601 datetime
         }
 
-    See RRP-0012 for the paper-level status rollup rules.
+    Per-claim ``replication_status`` is **derived server-side** from
+    annotations (RRP-0019, RRP-0020) — the value persisted on the claim
+    is advisory only. See RRP-0012 for the paper-level status rollup
+    rules.
     """
     # Claim aggregates ---------------------------------------------------
     claims = [c for c in store.list_claims() if c.get("paper_id") == paper_id]
@@ -42,7 +47,14 @@ def compute_stats(paper_id: str, store: Store) -> dict[str, Any]:
     contested = 0
     untested = 0
     for claim in claims:
-        rs = claim.get("replication_status", "untested")
+        cid = claim.get("id")
+        rs = (
+            derive_replication_status(
+                cid, store, authored_default=claim.get("replication_status")
+            )
+            if cid
+            else "untested"
+        )
         if rs == "replicated":
             replicated += 1
         elif rs == "contradicted":
@@ -50,7 +62,7 @@ def compute_stats(paper_id: str, store: Store) -> dict[str, Any]:
         elif rs == "partial":
             contested += 1
         else:
-            # "untested" or unset
+            # "untested" / "retracted" / unset
             untested += 1
 
     # Annotations ---------------------------------------------------------

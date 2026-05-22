@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rrxiv.com/schema/v0/revision_diff.schema.json",
+  "title": "RevisionDiff",
+  "description": "Structural diff between two versions of a paper. `from` is the older paper; `to` is the newer. Both must share the same lineage (one's `previous_version` chain must reach the other). Returned by GET /api/v0/papers/{id}/diff?from=<prior_paper_id>. See RRP-0017 for design rationale.",
+  "version": "0.1.0",
+  "type": "object",
+  "required": ["from", "to", "abstract_changed", "topics_changed", "claims", "computed_at"],
+  "properties": {
+    "from": {
+      "$ref": "#/$defs/VersionRef",
+      "description": "Older version's identification."
+    },
+    "to": {
+      "$ref": "#/$defs/VersionRef",
+      "description": "Newer version's identification."
+    },
+    "abstract_changed": {
+      "type": "boolean",
+      "description": "True if the abstract differs after `tex_to_text` normalisation."
+    },
+    "abstract_diff": {
+      "type": ["object", "null"],
+      "description": "Word-level diff hunks for the abstract. Present iff abstract_changed=true.",
+      "required": ["hunks"],
+      "properties": {
+        "hunks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DiffHunk" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "topics_changed": {
+      "type": "boolean",
+      "description": "True if the paper's topic set changed."
+    },
+    "topics_added": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Topics present in `to` but not in `from`."
+    },
+    "topics_removed": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Topics present in `from` but not in `to`."
+    },
+    "claims": {
+      "type": "object",
+      "required": ["added", "removed", "modified", "unchanged_count"],
+      "properties": {
+        "added": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AddedClaim" },
+          "description": "Claims present in `to` with no counterpart in `from`."
+        },
+        "removed": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RemovedClaim" },
+          "description": "Claims present in `from` with no counterpart in `to`."
+        },
+        "modified": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ModifiedClaim" },
+          "description": "Claim pairs (one in `from`, one in `to`) matched by the deterministic matching rule (RRP-0017 §Claim matching rule) whose contents differ."
+        },
+        "unchanged_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of claim pairs that matched and are byte-identical."
+        }
+      },
+      "additionalProperties": false
+    },
+    "computed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Server's ISO-8601 timestamp for when the diff was computed. Cached responses preserve the original computation time."
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "VersionRef": {
+      "type": "object",
+      "required": ["paper_id", "version"],
+      "properties": {
+        "paper_id": { "type": "string", "format": "uuid" },
+        "version": { "type": "string", "pattern": "^v[0-9]+$" },
+        "id_slug": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "AddedClaim": {
+      "type": "object",
+      "required": ["claim_id", "local_id", "statement", "claim_type"],
+      "properties": {
+        "claim_id": { "type": "string" },
+        "local_id": { "type": "string", "description": "Stable label from the source (e.g. `prop:I.10`)." },
+        "statement": { "type": "string" },
+        "claim_type": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "RemovedClaim": {
+      "type": "object",
+      "required": ["claim_id", "local_id", "statement"],
+      "properties": {
+        "claim_id": { "type": "string" },
+        "local_id": { "type": "string" },
+        "statement": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "ModifiedClaim": {
+      "type": "object",
+      "required": ["from_claim_id", "to_claim_id", "local_id", "fields_changed"],
+      "properties": {
+        "from_claim_id": { "type": "string", "description": "Claim ID in the `from` version." },
+        "to_claim_id": { "type": "string", "description": "Claim ID in the `to` version." },
+        "local_id": { "type": "string", "description": "Stable label shared across both versions." },
+        "fields_changed": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "statement",
+              "proof",
+              "claim_type",
+              "evidence_type",
+              "figures",
+              "depends_on",
+              "supports",
+              "contradicts",
+              "extends",
+              "source_location"
+            ]
+          },
+          "description": "List of claim fields that differ between the two versions."
+        },
+        "statement_diff": {
+          "$ref": "#/$defs/TextDiff",
+          "description": "Word-level diff of the statement. Present iff `statement` is in `fields_changed`."
+        },
+        "proof_diff": {
+          "$ref": "#/$defs/TextDiff",
+          "description": "Word-level diff of the proof. Present iff `proof` is in `fields_changed`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "TextDiff": {
+      "type": "object",
+      "required": ["hunks"],
+      "properties": {
+        "hunks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DiffHunk" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "DiffHunk": {
+      "type": "object",
+      "required": ["kind", "text"],
+      "properties": {
+        "kind": {
+          "enum": ["equal", "added", "removed"],
+          "description": "Direction of the hunk."
+        },
+        "text": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "from": {
+        "paper_id": "01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f",
+        "version": "v1",
+        "id_slug": "rrxiv:2605.00001"
+      },
+      "to": {
+        "paper_id": "01924a01-1c2b-7d4e-8f10-aabbccddeeff",
+        "version": "v2",
+        "id_slug": "rrxiv:2605.00001"
+      },
+      "abstract_changed": true,
+      "abstract_diff": {
+        "hunks": [
+          { "kind": "equal", "text": "rrxiv is an open protocol for research preprints" },
+          { "kind": "added", "text": ", with a live canonical instance at rrxiv.com" }
+        ]
+      },
+      "topics_changed": false,
+      "topics_added": [],
+      "topics_removed": [],
+      "claims": {
+        "added": [],
+        "removed": [],
+        "modified": [
+          {
+            "from_claim_id": "01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f:queryability",
+            "to_claim_id": "01924a01-1c2b-7d4e-8f10-aabbccddeeff:queryability",
+            "local_id": "queryability",
+            "fields_changed": ["statement"],
+            "statement_diff": {
+              "hunks": [
+                { "kind": "equal", "text": "A protocol that exposes claims as first-class structured entities" },
+                { "kind": "removed", "text": " is queryable by agents" },
+                { "kind": "added", "text": " is queryable by humans and agents alike" },
+                { "kind": "equal", "text": " in ways an unstructured PDF corpus is not." }
+              ]
+            }
+          }
+        ],
+        "unchanged_count": 14
+      },
+      "computed_at": "2026-06-15T11:42:00Z"
+    }
+  ]
+}

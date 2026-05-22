@@ -31,9 +31,11 @@
         "comment",
         "code_link",
         "dataset_link",
-        "claim_extraction"
+        "claim_extraction",
+        "revision_summary",
+        "claim_retraction"
       ],
-      "description": "What kind of annotation this is. The structured_payload schema varies by type."
+      "description": "What kind of annotation this is. The structured_payload schema varies by type — see spec/0006-annotations.md. `revision_summary` (RRP-0017) attaches to a revised paper and describes the changes from the prior version. `claim_retraction` (RRP-0020) is an author-only fast path that overrides the derived replication_status of a single claim."
     },
     "content": {
       "type": "string",
@@ -87,6 +89,10 @@
     "supersedes": {
       "type": ["string", "null"],
       "description": "If this annotation supersedes a prior one (e.g. corrected erratum), the prior annotation's ID."
+    },
+    "in_reply_to": {
+      "type": ["string", "null"],
+      "description": "Annotation ID of the annotation this one replies to. The target annotation must be on the same artefact: same paper (and, when both annotations are claim-targeted, the same claim). Null/absent means this is a top-level annotation. Clients reconstruct threads client-side from this pointer. See RRP-0018."
     }
   },
   "examples": [
