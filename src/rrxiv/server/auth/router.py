@@ -103,6 +103,18 @@ def orcid_start(
 class OrcidCallbackBody(BaseModel):
     code: str
     state: str
+    redirect_uri: str | None = None
+    """The redirect_uri the web client sent in the authorize step.
+
+    When present, the server uses it for the token-exchange call to
+    ORCID (which OAuth requires to be byte-identical to the authorize
+    step's redirect_uri per RFC 6749 §4.1.3). When absent, falls back
+    to ``RRXIV_ORCID_REDIRECT_URI``.
+
+    Origin-agnostic clients (a web app that runs on both ``rrxiv.com``
+    and ``www.rrxiv.com``) must thread this through or the token
+    exchange 401s on the mismatch.
+    """
 
 
 class OrcidCallbackResponse(BaseModel):
@@ -119,7 +131,9 @@ def orcid_callback(
     settings: ServerSettings = request.app.state.settings
     store: Store = request.app.state.store
 
-    orcid_id = _resolve_orcid_id_from_code(settings, body.code)
+    orcid_id = _resolve_orcid_id_from_code(
+        settings, body.code, redirect_uri=body.redirect_uri
+    )
 
     token = _issue_token(
         store=store,
@@ -179,7 +193,10 @@ def _mint_paste_code() -> str:
 
 
 def _resolve_orcid_id_from_code(
-    settings: ServerSettings, code: str
+    settings: ServerSettings,
+    code: str,
+    *,
+    redirect_uri: str | None = None,
 ) -> str:
     """Either accept a dev code or call orcid.org's token endpoint.
 
@@ -187,8 +204,10 @@ def _resolve_orcid_id_from_code(
 
     - ``RRXIV_ORCID_CLIENT_ID`` and ``RRXIV_ORCID_CLIENT_SECRET`` must
       be set for real-mode exchange.
-    - The ``ORCID_REDIRECT_URI`` must match the URI registered with
-      ORCID for your client_id; we read it from a setting too.
+    - ``redirect_uri`` must match the URI sent in the authorize step
+      (OAuth RFC 6749 §4.1.3 requires byte-identical values). Caller
+      should pass the same URI the web client used; falls back to
+      ``settings.orcid_redirect_uri`` (env var) for legacy callers.
 
     Raises :class:`ProblemError` on any failure.
     """
@@ -202,6 +221,8 @@ def _resolve_orcid_id_from_code(
             "or run with --dev-mode for local development"
         )
 
+    effective_redirect_uri = redirect_uri or settings.orcid_redirect_uri or ""
+
     import httpx
 
     try:
@@ -212,7 +233,7 @@ def _resolve_orcid_id_from_code(
                 "client_secret": settings.orcid_client_secret,
                 "code": code,
                 "grant_type": "authorization_code",
-                "redirect_uri": settings.orcid_redirect_uri or "",
+                "redirect_uri": effective_redirect_uri,
             },
             headers={"Accept": "application/json"},
             timeout=15.0,
