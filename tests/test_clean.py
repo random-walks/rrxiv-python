@@ -99,6 +99,31 @@ class TestWhitespace:
         assert tex_to_text("  hello  \n\n") == "hello"
 
 
+class TestDashes:
+    """LaTeX dash conventions → Unicode."""
+
+    def test_en_dash(self) -> None:
+        # `--` → en-dash (U+2013)
+        assert tex_to_text("Human--Agent") == "Human–Agent"
+
+    def test_em_dash(self) -> None:
+        # `---` → em-dash (U+2014); converted before `--` so we don't eat the inner pair
+        assert tex_to_text("foo---bar") == "foo—bar"
+
+    def test_single_hyphen_preserved(self) -> None:
+        assert tex_to_text("first-class") == "first-class"
+
+    def test_dashes_in_real_title(self) -> None:
+        # Regression: the whitepaper title carried `Human--Agent`
+        # which round-tripped as two literal hyphens before this fix.
+        out = tex_to_text(
+            "rrxiv: An Open Protocol for Research Preprints in the "
+            "Era of Human--Agent Coproduction"
+        )
+        assert "Human–Agent" in out
+        assert "Human--Agent" not in out
+
+
 class TestDropMacros:
     """``\\thanks{...}`` and friends should be dropped entirely.
 
@@ -152,6 +177,7 @@ class TestPreservation:
 class TestRealWorldFragments:
     def test_whitepaper_title(self) -> None:
         # The whitepaper title uses \Large + \\[0.2em] + \large
+        # plus `--` (LaTeX en-dash → U+2013).
         title_tex = (
             r"\Large rrxiv: An Open Protocol for Research Preprints \\[0.2em] "
             r"\large in the Era of Human--Agent Coproduction"
@@ -159,7 +185,7 @@ class TestRealWorldFragments:
         out = tex_to_text(title_tex)
         assert out == (
             "rrxiv: An Open Protocol for Research Preprints "
-            "in the Era of Human--Agent Coproduction"
+            "in the Era of Human–Agent Coproduction"
         )
 
     def test_claim_with_texttt(self) -> None:
