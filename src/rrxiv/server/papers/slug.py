@@ -63,12 +63,47 @@ def mint_slug(store: Store, submitted_at: datetime | None = None) -> str:
 
 
 def find_paper_by_slug(store: Store, slug: str) -> dict[str, Any] | None:
-    """Linear scan for a paper with the given ``id_slug``.
+    """Linear scan for the head-of-lineage paper matching ``id_slug``.
 
-    Default implementation suitable for any ``Store``. SQL-backed stores
-    can override with an indexed lookup once the corpus warrants it.
+    Slugs are stable across revisions (RRP-0013), so multiple paper
+    rows can share a slug — one per version in the lineage chain.
+    The "right" paper to return is the HEAD (latest version, i.e.
+    the one nothing else points to via ``previous_version``).
+
+    Earlier this function returned the first match in insertion
+    order, which surfaced v1 instead of v4 on the paper-detail page
+    after a revision landed. Now we collect all candidates, drop
+    those that any other candidate supersedes, and return the
+    remaining one. If for some reason multiple "heads" exist
+    (concurrent forks, data corruption), we fall back to the most
+    recently submitted.
+
+    Default implementation suitable for any ``Store``. SQL-backed
+    stores can override with an indexed lookup once the corpus
+    warrants it.
     """
-    for paper in store.list_papers():
-        if paper.get("id_slug") == slug:
-            return paper
-    return None
+    candidates = [p for p in store.list_papers() if p.get("id_slug") == slug]
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+
+    # Drop any candidate that is the previous_version of another
+    # candidate in the same slug-set (older versions).
+    superseded_ids = {
+        p.get("previous_version")
+        for p in candidates
+        if p.get("previous_version")
+    }
+    heads = [p for p in candidates if p.get("id") not in superseded_ids]
+
+    if len(heads) == 1:
+        return heads[0]
+    if not heads:
+        # No clear head (cycle, perhaps) — fall back to newest.
+        return max(
+            candidates,
+            key=lambda p: p.get("submitted_at") or "",
+        )
+    # Multiple heads (concurrent forks) — return the most recent.
+    return max(heads, key=lambda p: p.get("submitted_at") or "")

@@ -328,6 +328,48 @@ def test_paper_resolve_by_slug() -> None:
     assert by_slug.json()["id"] == "uuid-p1"
 
 
+def test_paper_resolve_by_slug_returns_head_of_lineage() -> None:
+    """Per RRP-0013, slugs are inherited across revisions — multiple
+    paper rows share a slug. The slug resolver must return the
+    HEAD (latest version), not whatever's first in insertion order.
+
+    Regression: earlier the resolver returned v1 even when v4
+    existed in the lineage, so ``/papers/rrxiv:2605.00001`` on the
+    web rendered stale v1 data.
+    """
+    app, transport = _build_app_and_transport()
+
+    v1 = _paper("paper-v1")
+    v1["id_slug"] = "rrxiv:2605.00099"
+    v1["version"] = "v1"
+    v1["submitted_at"] = "2026-05-01T10:00:00Z"
+
+    v2 = _paper("paper-v2")
+    v2["id_slug"] = "rrxiv:2605.00099"
+    v2["version"] = "v2"
+    v2["previous_version"] = "paper-v1"
+    v2["submitted_at"] = "2026-05-15T10:00:00Z"
+
+    v3 = _paper("paper-v3")
+    v3["id_slug"] = "rrxiv:2605.00099"
+    v3["version"] = "v3"
+    v3["previous_version"] = "paper-v2"
+    v3["submitted_at"] = "2026-05-22T10:00:00Z"
+
+    app.state.store.add_paper(v1)
+    app.state.store.add_paper(v2)
+    app.state.store.add_paper(v3)
+
+    with httpx.Client(transport=transport, base_url="http://test/api/v0") as c:
+        resp = c.get("/papers/rrxiv:2605.00099")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == "paper-v3", (
+        f"slug resolution must return head-of-lineage v3, got {body['id']!r}"
+    )
+    assert body["version"] == "v3"
+
+
 def test_papers_claims_endpoint() -> None:
     app, transport = _build_app_and_transport()
     app.state.store.add_paper(_paper("p1"))
