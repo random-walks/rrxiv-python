@@ -419,6 +419,15 @@ app.add_typer(
 )
 
 
+# Submit a paper or revision (RRP-0016 / RRP-0017).
+from rrxiv.cli.submit import submit as _submit  # noqa: E402
+
+app.command(
+    name="submit",
+    help="Submit a paper or revision via POST /api/v0/submissions.",
+)(_submit)
+
+
 @snapshot_app.command("create")
 def snapshot_create(
     directory: Annotated[
