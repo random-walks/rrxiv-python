@@ -212,6 +212,23 @@ async def submit_paper(
     }
     store.add_paper(paper_metadata)
     store.add_cir(cir_data)
+
+    # Persist each claim into the dedicated claims table so the
+    # ``/papers/{id}/claims`` + ``/claims/{id}`` + claim-graph
+    # endpoints find them. The seed-store flow already does this;
+    # the submit flow previously stored only the bundled CIR blob
+    # and the paper metadata, leaving the claims invisible to the
+    # read paths even though they were inside the CIR. Surfaced
+    # live on whitepaper v3 (paper page showed "0 claims").
+    for claim in cir_data.get("claims") or []:
+        if not isinstance(claim, dict):
+            continue
+        # Ensure the claim's paper_id reflects the (possibly newly
+        # minted) paper id, not whatever the client wrote.
+        cleaned_claim = dict(claim)
+        cleaned_claim["paper_id"] = paper_id
+        store.add_claim(cleaned_claim)
+
     source_uri = store.save_source(paper_id, bundle_bytes)
 
     # Synthesise a revision_summary annotation if the submitter passed

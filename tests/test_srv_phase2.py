@@ -716,6 +716,48 @@ def test_submit_revision_with_same_cir_id_mints_fresh_paper_id() -> None:
     assert app.state.store.get_paper(body["paper_id"]) is not None
 
 
+def test_submit_persists_claims_into_claims_table() -> None:
+    """Regression: claims embedded in the submitted CIR must be persisted
+    as individual rows in the store's claims table so the
+    ``/papers/{id}/claims`` + ``/claims/{id}`` read paths find them.
+
+    Earlier the submit handler stored only the paper metadata + the
+    CIR blob; ``/papers/{id}/claims`` returned an empty list for any
+    paper that came through ``/submissions`` (vs the seed-store flow
+    which did persist claims). Surfaced live on whitepaper v3 — the
+    home page showed ``0 claims`` for an otherwise-valid paper.
+    """
+    app, sync = _client_with_orcid_bearer()
+
+    paper = _paper("p-claims-persisted")
+    paper["claims"] = [
+        _claim("p-claims-persisted:c1", "p-claims-persisted", statement="First claim."),
+        _claim("p-claims-persisted:c2", "p-claims-persisted", statement="Second claim."),
+        _claim("p-claims-persisted:c3", "p-claims-persisted", statement="Third claim."),
+    ]
+    resp = _submit(sync, paper, b"bundle")
+    assert resp.status_code == 201, resp.text
+
+    # Store must now have the three claim rows individually.
+    stored_claims = [
+        c for c in app.state.store.list_claims()
+        if c.get("paper_id") == "p-claims-persisted"
+    ]
+    assert len(stored_claims) == 3, stored_claims
+
+    # And the public read paths must surface them.
+    list_resp = sync.get("/papers/p-claims-persisted/claims")
+    sync.close()
+    assert list_resp.status_code == 200
+    items = list_resp.json()["items"]
+    assert len(items) == 3
+    assert {c["id"] for c in items} == {
+        "p-claims-persisted:c1",
+        "p-claims-persisted:c2",
+        "p-claims-persisted:c3",
+    }
+
+
 def test_paper_versions_endpoint_cycle_safe() -> None:
     """A pathological self-loop (paper.id == paper.previous_version)
     in the store must not hang the versions walker — earlier code
