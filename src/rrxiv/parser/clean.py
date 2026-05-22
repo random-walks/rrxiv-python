@@ -189,6 +189,22 @@ def _normalize_whitespace(text: str) -> str:
     return text.strip()
 
 
+def _convert_dashes(text: str) -> str:
+    """Convert LaTeX dash conventions to Unicode equivalents.
+
+    LaTeX source uses ``--`` for an en-dash (U+2013) and ``---`` for an
+    em-dash (U+2014). Plain readers (HTML, Markdown, terminal) don't
+    perform this rewrite automatically, so titles like
+    ``Human--Agent Coproduction`` render with two literal hyphens.
+
+    Convert ``---`` first (more specific) so we don't eat its inner
+    ``--`` first.
+    """
+    text = text.replace("---", "—")
+    text = text.replace("--", "–")
+    return text
+
+
 def tex_to_text(text: str) -> str:
     """Convert a LaTeX source fragment to plain text suitable for the CIR.
 
@@ -215,6 +231,7 @@ def tex_to_text(text: str) -> str:
     text = _strip_bare_font_macros(text)
     text = _strip_special_macros(text)
     text = _strip_line_breaks(text)
+    text = _convert_dashes(text)
     text = _normalize_whitespace(text)
     return text
 
