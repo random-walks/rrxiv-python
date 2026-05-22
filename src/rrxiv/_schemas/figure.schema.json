@@ -22,8 +22,8 @@
     },
     "uri": {
       "type": ["string", "null"],
-      "format": "uri",
-      "description": "URI to the figure file (PDF, PNG, SVG)."
+      "format": "uri-reference",
+      "description": "URI to the figure file (PDF, PNG, SVG). May be absolute or relative — relative URIs resolve against `paper.source.uri` (RRP-0015)."
     },
     "referenced_in": {
       "type": "array",
