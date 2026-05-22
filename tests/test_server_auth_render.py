@@ -151,6 +151,99 @@ def test_orcid_callback_real_mode_propagates_orcid_failure(
     assert resp.status_code == 401
 
 
+def test_orcid_callback_uses_redirect_uri_from_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The body's ``redirect_uri`` overrides the env-var default.
+
+    Regression coverage: when the web client lives on a different
+    origin than the static ``RRXIV_ORCID_REDIRECT_URI`` env var (e.g.
+    Vercel 307s ``rrxiv.com`` → ``www.rrxiv.com``), the value sent in
+    the authorize step won't match the env var. ORCID 401s the token
+    exchange on the mismatch. Threading the redirect_uri through the
+    callback body fixes this.
+    """
+    settings = ServerSettings(
+        dev_mode=False,
+        orcid_client_id="test-client",
+        orcid_client_secret="test-secret",
+        orcid_redirect_uri="https://example.invalid/should-not-be-used",
+    )
+    captured: list[dict[str, Any]] = []
+
+    def fake_post(url: str, *, data: Any = None, **kwargs: Any) -> Any:
+        captured.append({"url": url, "data": dict(data or {})})
+
+        class _Resp:
+            status_code = 200
+            text = ""
+
+            def json(self) -> dict[str, Any]:
+                return {
+                    "access_token": "x",
+                    "orcid": "0000-0001-2345-6789",
+                    "token_type": "bearer",
+                }
+
+        return _Resp()
+
+    monkeypatch.setattr("httpx.post", fake_post)
+
+    _, sync = _client(settings)
+    with sync as c:
+        resp = c.post(
+            "/auth/orcid/callback",
+            json={
+                "code": "real-code",
+                "state": "s",
+                "redirect_uri": "https://www.rrxiv.com/api/auth/orcid/callback",
+            },
+        )
+    assert resp.status_code == 200
+    # Server used the body's value, NOT the env var default.
+    assert captured[0]["data"]["redirect_uri"] == (
+        "https://www.rrxiv.com/api/auth/orcid/callback"
+    )
+
+
+def test_orcid_callback_falls_back_to_env_redirect_uri(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy callers without a ``redirect_uri`` in the body use the env var."""
+    settings = ServerSettings(
+        dev_mode=False,
+        orcid_client_id="test-client",
+        orcid_client_secret="test-secret",
+        orcid_redirect_uri="https://rrxiv.com/api/auth/orcid/callback",
+    )
+    captured: list[dict[str, Any]] = []
+
+    def fake_post(url: str, *, data: Any = None, **kwargs: Any) -> Any:
+        captured.append({"data": dict(data or {})})
+
+        class _Resp:
+            status_code = 200
+            text = ""
+
+            def json(self) -> dict[str, Any]:
+                return {"orcid": "0000-0001-1111-2222"}
+
+        return _Resp()
+
+    monkeypatch.setattr("httpx.post", fake_post)
+
+    _, sync = _client(settings)
+    with sync as c:
+        resp = c.post(
+            "/auth/orcid/callback",
+            json={"code": "real", "state": "s"},  # no redirect_uri
+        )
+    assert resp.status_code == 200
+    assert captured[0]["data"]["redirect_uri"] == (
+        "https://rrxiv.com/api/auth/orcid/callback"
+    )
+
+
 # ----- Anonymous render -----
 
 
