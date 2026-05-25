@@ -67,14 +67,19 @@ rrxiv seed-store --from ./seed --store sqlite:////data/rrxiv.db --reset
 - `rrxiv.client` — async + sync HTTP client + retry policy + signature middleware.
 - `rrxiv.server` — FastAPI app factory + 8 routers (auth, papers, claims, annotations, snapshots, search, submissions, sources). Pluggable `Store` (memory / sqlite / future Postgres).
 - `rrxiv.testing` — `live_server` pytest fixture for running the server against real HTTP.
-- `rrxiv.cli` — Typer CLI: `parse`, `validate`, `serve`, `seed-store`, `snapshot`, `login`, `submit`, `doctor`.
-- `tests/` — 397 unit tests + the live cross-conformance test (`test_server_cross.py`) that runs the protocol-level test suite against the in-process server.
+- `rrxiv.cli` — Typer CLI:
+  - **Authoring**: `parse`, `validate`, `submit`, `snapshot`, `doctor`.
+  - **Auth**: `login` (ORCID / agent / anonymous flows, keychain persistence).
+  - **Ops**: `serve`, `seed-store`.
+  - **Read**: `version`, `papers {list,get,versions}`, `claims {list,get,top}`, `search` — added in Sprint 19 so the CLI is a first-class read client, not write-only.
+  - **Annotations**: `annotation {validate,post,list,retract,replicate,comment,post-batch}` — `post-batch` hits `POST /annotations/bulk` (up to 100 per request, single rate-limit unit).
+- `tests/` — 400+ unit tests + the live cross-conformance test (`test_server_cross.py`) that runs the protocol-level test suite against the in-process server.
 
 ## Development
 
 ```bash
 uv sync --all-extras
-uv run pytest               # 397 passed, 4 skipped
+uv run pytest               # 400+ passed, ~4 skipped
 uv run ruff check .
 uv run mypy src/
 ```
