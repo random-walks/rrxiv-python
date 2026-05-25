@@ -57,6 +57,27 @@ def submit(
             help="Path to the source bundle (`.tar.gz`).",
         ),
     ],
+    pdf_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--pdf",
+            exists=True,
+            readable=True,
+            help=(
+                "Path to the rendered PDF. If unset, the CLI auto-detects "
+                "build/main.pdf next to the CIR/bundle. Pass --no-pdf to "
+                "skip uploading a PDF (the submission still succeeds; the "
+                "read-side PDF endpoint will 404)."
+            ),
+        ),
+    ] = None,
+    no_pdf: Annotated[
+        bool,
+        typer.Option(
+            "--no-pdf",
+            help="Submit without a PDF even if one is auto-detected.",
+        ),
+    ] = False,
     server: Annotated[
         str,
         typer.Option("--server", help="API base URL."),
@@ -153,6 +174,21 @@ def submit(
 
     bundle_hash = hashlib.sha256(bundle_bytes).hexdigest()
 
+    # ---- Resolve PDF path --------------------------------------------
+    # Auto-detect: build/main.pdf next to the bundle is the convention
+    # produced by rrxiv-paper-template's scripts/build.sh.
+    resolved_pdf: Path | None = None
+    if not no_pdf:
+        if pdf_path is not None:
+            resolved_pdf = pdf_path
+        else:
+            candidate = bundle_path.parent / "main.pdf"
+            if candidate.is_file():
+                resolved_pdf = candidate
+    pdf_bytes: bytes | None = (
+        resolved_pdf.read_bytes() if resolved_pdf is not None else None
+    )
+
     # ---- Resolve revision_summary -------------------------------------
     summary_text: str | None = None
     if revision_summary and revision_summary_file:
@@ -168,10 +204,12 @@ def submit(
         summary_text = revision_summary_file.read_text(encoding="utf-8")
 
     # ---- Build multipart body -----------------------------------------
-    files = {
+    files: dict[str, tuple[str, bytes, str]] = {
         "cir": (cir_path.name, cir_bytes, "application/json"),
         "bundle": (bundle_path.name, bundle_bytes, "application/gzip"),
     }
+    if pdf_bytes is not None and resolved_pdf is not None:
+        files["pdf"] = (resolved_pdf.name, pdf_bytes, "application/pdf")
     data: dict[str, str] = {}
     if revision_of:
         data["previous_version"] = revision_of
@@ -191,9 +229,12 @@ def submit(
     # ---- POST ---------------------------------------------------------
     if not json_output:
         mode = "dry-run" if dry_run else ("revision" if revision_of else "submission")
+        pdf_note = (
+            f" + {resolved_pdf.name}" if resolved_pdf is not None else " (no PDF)"
+        )
         typer.echo(
             f"==> {mode} to {server} as {identity_kind} "
-            f"({bundle_path.name}, sha256={bundle_hash[:12]}…)"
+            f"({bundle_path.name}{pdf_note}, sha256={bundle_hash[:12]}…)"
         )
 
     with httpx.Client(timeout=120.0) as client:

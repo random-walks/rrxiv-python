@@ -52,6 +52,7 @@ async def submit_paper(
     request: Request,
     cir: UploadFile = File(...),
     bundle: UploadFile = File(...),
+    pdf: UploadFile | None = File(default=None),
     previous_version: str | None = Form(default=None),
     revision_summary: str | None = Form(default=None),
     dry_run: str | None = Form(default=None),
@@ -66,6 +67,12 @@ async def submit_paper(
     - ``cir``: client-computed CIR JSON.
     - ``bundle``: source archive (.tar.gz). Persisted to the store and
       reachable via ``GET /papers/{id}/source``.
+    - ``pdf``: *optional* rendered PDF. Persisted to the store and
+      reachable via ``GET /papers/{id}/pdf``. Without it the submission
+      still succeeds, but consumers won't have a PDF download available
+      until a later revision provides one. (Whitepaper v2–v4 dogfooded
+      this regression: CIR-only submits left the read-side PDF endpoint
+      404'ing. v5 added it; submit.sh now auto-detects build/main.pdf.)
     - ``previous_version``: paper_id of the prior version (revisions only).
     - ``revision_summary``: optional plaintext describing the changes;
       the server synthesises a ``revision_summary`` annotation (RRP-0017).
@@ -83,9 +90,14 @@ async def submit_paper(
 
     is_dry_run = (dry_run or "").lower() in ("true", "1", "yes")
 
-    # Read both files fully into memory. v0.1 reference server scope.
+    # Read uploads fully into memory. v0.1 reference server scope.
     cir_bytes = await cir.read()
     bundle_bytes = await bundle.read()
+    pdf_bytes: bytes | None = await pdf.read() if pdf is not None else None
+    # Guard against an empty PDF file slot (browser/curl shenanigans
+    # where the field is present but the body is zero-length).
+    if pdf_bytes is not None and not pdf_bytes:
+        pdf_bytes = None
 
     # client_compile_hash check (RRP-0016).
     if client_compile_hash:
@@ -205,6 +217,23 @@ async def submit_paper(
         if existing is not None:
             return JSONResponse(status_code=201, content=existing.response_body)
 
+    # Persist source archive + (optional) PDF first so we can stamp
+    # their API URIs onto the CIR before saving. This mirrors what
+    # ``rrxiv seed-store`` already does in cli/seed.py:load_cir_into_store
+    # and brings the submission flow to parity. Without this, papers
+    # submitted via /submissions would carry stale (often file://)
+    # source URIs forever — surfaced live on whitepaper v4.
+    source_uri = store.save_source(paper_id, bundle_bytes)
+    cir_data.setdefault("source", {})
+    if isinstance(cir_data["source"], dict):
+        cir_data["source"]["uri"] = source_uri
+        cir_data["source"].setdefault("format", "latex")
+
+    if pdf_bytes is not None:
+        pdf_uri = store.save_rendered_pdf(paper_id, pdf_bytes)
+        if isinstance(cir_data.get("source"), dict):
+            cir_data["source"]["rendered_pdf_uri"] = pdf_uri
+
     paper_metadata = {
         k: v
         for k, v in cir_data.items()
@@ -228,8 +257,6 @@ async def submit_paper(
         cleaned_claim = dict(claim)
         cleaned_claim["paper_id"] = paper_id
         store.add_claim(cleaned_claim)
-
-    source_uri = store.save_source(paper_id, bundle_bytes)
 
     # Synthesise a revision_summary annotation if the submitter passed
     # `revision_summary` (RRP-0017). The author can supersede this with
