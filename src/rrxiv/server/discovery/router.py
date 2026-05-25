@@ -59,11 +59,30 @@ def list_topics(
 @router.get("/stats")
 def corpus_stats(request: Request) -> dict[str, Any]:
     """Aggregate corpus counts. Computed live; cheap for v0.1 corpora,
-    will need memoisation at scale."""
+    will need memoisation at scale.
+
+    Reports two paper counts:
+
+    - ``papers`` — total paper records, including superseded versions
+      that no longer surface in head-of-lineage listings. Useful for
+      "this corpus has 580 paper records on disk" stats.
+    - ``head_papers`` — only the head-of-lineage rows (i.e. papers
+      that aren't anyone else's ``previous_version``). Matches what
+      ``GET /papers`` returns by default. This is the count clients
+      should show in user-facing UI; the discrepancy was confusing
+      on the home page ("Showing 9 of 20" with no Next button — the
+      11 missing ones were superseded v1s).
+    """
     store: Store = get_store(request)
     papers = store.list_papers()
     claims = store.list_claims()
     annotations = store.list_annotations()
+    superseded_ids = {
+        prev
+        for p in papers
+        if (prev := p.get("previous_version")) and isinstance(prev, str)
+    }
+    head_papers = sum(1 for p in papers if p.get("id") not in superseded_ids)
 
     replications = sum(
         1
@@ -100,6 +119,7 @@ def corpus_stats(request: Request) -> dict[str, Any]:
 
     return {
         "papers": len(papers),
+        "head_papers": head_papers,
         "claims": len(claims),
         "annotations": len(annotations),
         "replications": replications,
