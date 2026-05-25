@@ -172,6 +172,10 @@ class RequestLoggingMiddleware:
 
         start = time.perf_counter()
         request_id = uuid.uuid4().hex[:12]
+        # Stash on ASGI scope state so the error handler can echo it back
+        # to the client (correlates with fly logs + Sentry event_id).
+        scope.setdefault("state", {})
+        scope["state"]["request_id"] = request_id
         if sentry_sdk is not None:
             sentry_sdk.set_tag("request_id", request_id)
 
@@ -193,11 +197,31 @@ class RequestLoggingMiddleware:
             authed = state.get("authed")
             identity = getattr(authed, "identity", None) if authed else None
             kind, ident_id = identity_descriptor(identity)
+
+            # Bump the per-route Prometheus counter. Pull the route
+            # template (e.g. "/api/v0/papers/{paper_id}") off the scope
+            # so cardinality stays bounded — the literal path embeds
+            # the paper_id and would create a label per paper.
+            route = scope.get("route")
+            path_pattern = getattr(route, "path", None) or path
+            try:
+                from rrxiv.server.metrics import record_http_request
+
+                record_http_request(
+                    method=scope.get("method") or "?",
+                    path_pattern=path_pattern,
+                    status=status_holder["code"],
+                    auth_kind=kind,
+                )
+            except Exception:
+                pass
+
             record: dict[str, Any] = {
                 "ts": time.time(),
                 "request_id": request_id,
                 "method": scope.get("method"),
                 "path": path,
+                "path_pattern": path_pattern,
                 "status": status_holder["code"],
                 "duration_ms": duration_ms,
                 "auth_kind": kind,

@@ -285,6 +285,21 @@ async def create_annotations_bulk(
         store.add_annotation(item)
         results.append({"index": idx, "status": 201, "body": item})
 
+        # Sprint 21: bulk path counts each successfully-persisted
+        # annotation toward the same counter the singleton POST uses,
+        # so the dashboard's annotation volume reflects total work
+        # regardless of whether agents submit one-at-a-time or batched.
+        try:
+            from rrxiv.server.metrics import annotations_posted_total
+
+            annotations_posted_total.labels(
+                annotation_type=item.get("annotation_type") or "unknown",
+                auth_kind=auth.tier,
+                target_kind=item.get("target_type") or "unknown",
+            ).inc()
+        except Exception:
+            pass
+
     return {"results": results}
 
 
@@ -357,6 +372,18 @@ async def create_annotation(
     validate_in_reply_to(store, body)
 
     store.add_annotation(body)
+
+    # Sprint 21 metric: post-persist so failed annotations don't count.
+    try:
+        from rrxiv.server.metrics import annotations_posted_total
+
+        annotations_posted_total.labels(
+            annotation_type=body.get("annotation_type") or "unknown",
+            auth_kind=auth.tier,
+            target_kind=body.get("target_type") or "unknown",
+        ).inc()
+    except Exception:
+        pass
 
     if idempotency_key:
         store.add_idempotency(

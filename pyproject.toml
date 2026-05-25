@@ -32,6 +32,7 @@ server = [
     # Optional error reporting. The SDK no-ops at runtime unless
     # SENTRY_DSN is set, so this dep is safe to include unconditionally.
     "sentry-sdk[fastapi]>=2.0",
+    "prometheus-client>=0.20",
 ]
 dev = [
     "pytest>=8.0",

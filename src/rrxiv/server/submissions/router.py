@@ -295,6 +295,18 @@ async def submit_paper(
             ),
         )
 
+    # Sprint 21 metric: real submissions only — dry-runs return early
+    # above so they don't reach here. The "kind" label distinguishes
+    # initial vs. revision so the dashboard can show revision rate
+    # alongside total submission volume.
+    try:
+        from rrxiv.server.metrics import submissions_total
+
+        kind = "revision" if response_body.get("previous_version") else "initial"
+        submissions_total.labels(kind=kind).inc()
+    except Exception:
+        pass
+
     return JSONResponse(status_code=201, content=response_body)
 
 

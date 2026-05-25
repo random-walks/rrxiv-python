@@ -60,6 +60,21 @@ def get_settings(request: Request) -> ServerSettings:
     return settings
 
 
+def _record_429(identity: Identity) -> None:
+    """Bump the rate-limit counter when the sliding window fires.
+
+    Kept out of the hot path's import surface; metrics module is
+    optional via the server extras (Sprint 21)."""
+    try:
+        from rrxiv.server.metrics import rate_limit_429_total
+        from rrxiv.server.observability import identity_descriptor
+
+        kind, _ = identity_descriptor(identity)
+        rate_limit_429_total.labels(auth_kind=kind).inc()
+    except Exception:
+        pass
+
+
 def _identity_from_token(store: Store, token: str) -> Identity | None:
     record = store.get_token(token)
     if record is None:
@@ -118,6 +133,7 @@ def require_identity(*, allow_anonymous: bool = True) -> Callable:  # type: igno
         rpm = _rpm_for(identity, request.method, settings)
         count = store.record_request(token, int(time.time()))
         if count > rpm:
+            _record_429(identity)
             raise rate_limited(retry_after=1)
 
         authed = AuthedRequest(identity=identity, token=token)
@@ -158,6 +174,7 @@ def optional_identity() -> Callable:  # type: ignore[type-arg]
         rpm = _rpm_for(identity, request.method, settings)
         count = store.record_request(token, int(time.time()))
         if count > rpm:
+            _record_429(identity)
             raise rate_limited(retry_after=1)
 
         authed = AuthedRequest(identity=identity, token=token)
