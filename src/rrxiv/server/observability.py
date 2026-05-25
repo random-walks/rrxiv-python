@@ -57,6 +57,25 @@ __all__ = [
 _access_log = logging.getLogger("rrxiv.access")
 
 
+def _configure_access_logger() -> None:
+    """Wire ``rrxiv.access`` so the middleware's records actually
+    surface. By default the logger inherits from root, which under
+    uvicorn doesn't always have an INFO-level handler — we'd write
+    JSON lines into the void. Idempotent; safe to re-run."""
+    if _access_log.handlers:
+        return
+    _access_log.setLevel(logging.INFO)
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    _access_log.addHandler(handler)
+    # Don't double-log through uvicorn's root handler.
+    _access_log.propagate = False
+
+
+_configure_access_logger()
+
+
 def identity_descriptor(identity: Identity | None) -> tuple[str, str]:
     """Return ``(kind, display_id)`` for an identity.
 
