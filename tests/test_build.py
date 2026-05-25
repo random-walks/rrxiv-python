@@ -179,6 +179,43 @@ def test_author_thanks_stripped_and_deduped(tmp_path: Path) -> None:
     assert names == ["Blaise Albis-Burdige", "Claude"], names
 
 
+def test_author_and_separator_splits_into_multiple_entries(tmp_path: Path) -> None:
+    """``\\author{A \\and B \\and C}`` splits into three author entries.
+
+    Regression for Sprint 18: the seven Sprint-14 demo papers used the
+    single-group form ``\\author{Blaise Albis-Burdige \\and Claude (agent)}``
+    and the parser preserved ``\\and`` as a literal string in the cleaned
+    name. The home page rendered ``Blaise Albis-Burdige \\and Claude (agent)``
+    as one author. Now each ``\\and``-separated piece becomes its own
+    {name} entry.
+    """
+    tex = tmp_path / "p.tex"
+    sidecar = tmp_path / "p.rrxiv.aux"
+    tex.write_text(
+        r"\documentclass{rrxiv}"
+        "\n"
+        r"\title{T}"
+        "\n"
+        r"\author{Alice \and Bob \and Carol (agent)}"
+        "\n"
+        r"\begin{document}"
+        "\n"
+        r"\begin{abstract}A.\end{abstract}"
+        "\n"
+        r"\end{document}"
+        "\n"
+    )
+    sidecar.write_text(
+        "RRXIV:meta:id:test-and\n"
+        "RRXIV:meta:version:v1\n"
+        "RRXIV:meta:protocol:0.1.0\n"
+        "RRXIV:meta:license:CC-BY-4.0\n"
+    )
+    cir = build_cir(tex)
+    names = [a.name for a in cir.authors]
+    assert names == ["Alice", "Bob", "Carol (agent)"], names
+
+
 def test_author_duplicate_within_paper_dedup(tmp_path: Path) -> None:
     """If the .tex repeats ``\\author{Same}``, the second is dropped."""
     tex = tmp_path / "p.tex"
