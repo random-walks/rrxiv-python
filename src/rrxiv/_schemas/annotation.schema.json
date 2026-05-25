@@ -33,9 +33,10 @@
         "dataset_link",
         "claim_extraction",
         "revision_summary",
-        "claim_retraction"
+        "claim_retraction",
+        "paper_retraction"
       ],
-      "description": "What kind of annotation this is. The structured_payload schema varies by type — see spec/0006-annotations.md. `revision_summary` (RRP-0017) attaches to a revised paper and describes the changes from the prior version. `claim_retraction` (RRP-0020) is an author-only fast path that overrides the derived replication_status of a single claim."
+      "description": "What kind of annotation this is. The structured_payload schema varies by type — see spec/0006-annotations.md. `revision_summary` (RRP-0017) attaches to a revised paper and describes the changes from the prior version. `claim_retraction` (RRP-0020) is an author-only fast path that overrides the derived replication_status of a single claim; `paper_retraction` is its paper-level sibling, motivated by `rrxiv:2605.00007` c1 (\"Retraction is more naturally modelled as an annotation type — target, reason, scope — than as a paper-level flag\"). Both retraction types accept a `structured_payload.reason` from the {data_error, methodological_flaw, fraud, contamination, withdrawn_by_author, superseded_by_revision} taxonomy and an optional `structured_payload.superseded_by` pointing at the surviving paper or claim id."
     },
     "content": {
       "type": "string",
