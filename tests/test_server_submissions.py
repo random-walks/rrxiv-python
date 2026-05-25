@@ -86,6 +86,61 @@ def test_submit_paper_round_trip() -> None:
     assert "p-fixture" in app.state.store.state.papers
 
 
+def test_submit_persists_pdf_when_provided() -> None:
+    """Regression for whitepaper v4 — the submit flow accepted a bundle
+    but never persisted a PDF, so /pdf 404'd until a later seed-store
+    pass filled it in. After this fix the PDF endpoint serves the
+    submitted bytes directly."""
+    _, sync, _ = _client_with_orcid_bearer()
+    cir = _fixture_paper("p-pdf")
+    pdf_bytes = b"%PDF-1.4 fake pdf content"
+
+    resp = sync.post(
+        "/submissions",
+        files={
+            "cir": ("cir.json", json.dumps(cir).encode("utf-8"), "application/json"),
+            "bundle": ("p.tar.gz", b"src", "application/gzip"),
+            "pdf": ("main.pdf", pdf_bytes, "application/pdf"),
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+    pdf_resp = sync.get("/papers/p-pdf/pdf")
+    sync.close()
+    assert pdf_resp.status_code == 200, pdf_resp.text
+    assert pdf_resp.content == pdf_bytes
+    assert pdf_resp.headers["content-type"] == "application/pdf"
+
+
+def test_submit_rewrites_source_uri_to_server_relative() -> None:
+    """Regression for whitepaper v4 — the submit flow stored the bundle
+    but never rewrote ``source.uri`` on the CIR, so live papers carried
+    stale (often ``file://``) URIs forever. After this fix the saved
+    paper record has a server-relative URI matching what
+    ``rrxiv seed-store`` produces."""
+    app, sync, _ = _client_with_orcid_bearer()
+    cir = _fixture_paper("p-srcuri")
+    # Client-side stale URI — the kind that breaks the front-end.
+    cir["source"] = {"format": "latex", "uri": "file:///Users/x/main.tex"}
+
+    resp = sync.post(
+        "/submissions",
+        files={
+            "cir": ("cir.json", json.dumps(cir).encode("utf-8"), "application/json"),
+            "bundle": ("p.tar.gz", b"src", "application/gzip"),
+        },
+    )
+    sync.close()
+    assert resp.status_code == 201, resp.text
+
+    stored = app.state.store.state.papers.get("p-srcuri")
+    assert stored is not None
+    source = stored.get("source")
+    assert isinstance(source, dict)
+    assert source.get("uri", "").endswith("/papers/p-srcuri/source"), source
+    assert not source.get("uri", "").startswith("file://"), source
+
+
 def test_submit_invalid_cir_returns_422() -> None:
     _, sync, _ = _client_with_orcid_bearer()
     resp = sync.post(
