@@ -84,6 +84,16 @@ CREATE TABLE IF NOT EXISTS rate_window (
 );
 
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+
+-- Sprint 22: per-claim view counter. Bumped by claims/router.get_claim
+-- on every successful read; surfaced via /stats/pulse leaderboards and
+-- as the `views_count` field on the claim's read response.
+-- One row per claim, even if the claim later disappears (we keep the
+-- count so the leaderboard can reference the title from a snapshot).
+CREATE TABLE IF NOT EXISTS claim_views (
+  claim_id TEXT PRIMARY KEY,
+  count    INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -310,6 +320,45 @@ class SqliteStore:
     def list_claims(self) -> list[dict[str, Any]]:
         return self._list_blobs("claims")
 
+    # ----- Claim view counter (Sprint 22) -----
+    def bump_claim_view(self, claim_id: str) -> int:
+        """Atomically increment and return the new count.
+
+        UPSERT pattern keeps it to one round-trip even for the first
+        view. Doesn't validate that the claim exists — if a stale
+        client polls a deleted claim_id, we count it (zero downside,
+        and we want to know if it's happening)."""
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO claim_views (claim_id, count)
+                VALUES (?, 1)
+                ON CONFLICT(claim_id) DO UPDATE SET count = count + 1
+                """,
+                (claim_id,),
+            )
+            row = self._conn.execute(
+                "SELECT count FROM claim_views WHERE claim_id = ?",
+                (claim_id,),
+            ).fetchone()
+            self._conn.commit()
+            return int(row[0]) if row else 0
+
+    def get_claim_views(self, claim_id: str) -> int:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT count FROM claim_views WHERE claim_id = ?",
+                (claim_id,),
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+    def list_claim_views(self) -> dict[str, int]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT claim_id, count FROM claim_views"
+            ).fetchall()
+        return {row[0]: int(row[1]) for row in rows}
+
     def add_annotation(self, ann: dict[str, Any]) -> None:
         self._add_blob("annotations", ann["id"], ann)
 
@@ -464,6 +513,11 @@ class SqliteStore:
                 "annotations",
                 "sources",
                 "rendered_pdfs",
+                # Sprint 22: claim ids can change between releases when the
+                # parser re-prefixes them (Sprint 18's `paper-XYZ:c1` rebase),
+                # so the view counter MUST be reset too. Otherwise the
+                # leaderboard surfaces dead claim ids.
+                "claim_views",
             ):
                 self._conn.execute(f"DELETE FROM {table}")
             self._conn.commit()

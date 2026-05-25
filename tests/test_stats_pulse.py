@@ -306,6 +306,93 @@ def test_pulse_growth_metrics() -> None:
     assert growth["papers_with_third_party_engagement"] == 1
 
 
+def test_pulse_top_claims_by_views_uses_store_counter() -> None:
+    """Sprint 22: the leaderboard reads from store.list_claim_views()
+    so view bumps from GET /claims/{id} surface."""
+    store = MemoryStore()
+    store.add_paper(_paper("p1"))
+    store.add_claim(_claim("p1:c1", "p1"))
+    store.add_claim(_claim("p1:c2", "p1"))
+    store.add_claim(_claim("p1:c3", "p1"))
+    # Bump views: c2 twice, c1 once, c3 zero.
+    store.bump_claim_view("p1:c2")
+    store.bump_claim_view("p1:c2")
+    store.bump_claim_view("p1:c1")
+    # Bump a dead id too — should NOT appear in the leaderboard.
+    store.bump_claim_view("p-ghost:c99")
+    result = compute_pulse(store, window="all")
+    leaderboard = result["leaderboards"]["top_claims_by_views"]
+    assert leaderboard[0]["id"] == "p1:c2"
+    assert leaderboard[0]["views"] == 2
+    assert leaderboard[1]["id"] == "p1:c1"
+    assert leaderboard[1]["views"] == 1
+    # c3 had 0 views — excluded; p-ghost:c99 doesn't exist — excluded.
+    ids = {entry["id"] for entry in leaderboard}
+    assert "p1:c3" not in ids
+    assert "p-ghost:c99" not in ids
+
+
+def test_pulse_cohorts_bucket_first_writes_by_iso_week() -> None:
+    """First-write date for each identity buckets into the ISO week
+    of the earliest paper/annotation they authored. The exclude_list
+    is honoured."""
+    from datetime import UTC, datetime
+
+    store = MemoryStore()
+    # 0001 first wrote 2026-W21 (papers).
+    store.add_paper(
+        _paper(
+            "p1",
+            authors=[{"name": "A", "orcid_id": "0001"}],
+            created_by=_orcid("0001"),
+            submitted_at="2026-05-19T12:00:00Z",
+        )
+    )
+    # 0002 first wrote 2026-W22 (annotation).
+    store.add_paper(_paper("p2"))
+    store.add_annotation(
+        _annotation(
+            "a1",
+            target_id="p2",
+            target_type="paper",
+            created_by=_orcid("0002"),
+            created_at="2026-05-25T12:00:00Z",
+        )
+    )
+    # MAINTAINER excluded.
+    store.add_paper(
+        _paper(
+            "p-blaise",
+            authors=[{"name": "Blaise", "orcid_id": "BLAISE"}],
+            created_by=_orcid("BLAISE"),
+            submitted_at="2026-05-25T12:00:00Z",
+        )
+    )
+    result = compute_pulse(
+        store, window="all", exclude_identities={"BLAISE"}
+    )
+    bucket = result["cohorts"]["first_write_by_iso_week"]
+    assert bucket.get("2026-W21") == 1, bucket
+    assert bucket.get("2026-W22") == 1, bucket
+    # BLAISE excluded.
+    assert sum(bucket.values()) == 2
+
+
+def test_pulse_cohorts_weekly_actives_shape() -> None:
+    """`weekly_active_humans` is a list of ISO-week buckets covering
+    the last ~8 weeks. Empty weeks show as 0."""
+    store = MemoryStore()
+    result = compute_pulse(store, window="all")
+    cohorts = result["cohorts"]
+    assert "weekly_active_humans" in cohorts
+    assert "weekly_active_agents" in cohorts
+    # Both arrays have the same length and order; each entry has
+    # `iso_week` + `distinct_identities`.
+    for entry in cohorts["weekly_active_humans"]:
+        assert "iso_week" in entry and "distinct_identities" in entry
+        assert isinstance(entry["distinct_identities"], int)
+
+
 def test_pulse_uses_cache_then_invalidates() -> None:
     """The cache hides re-computation when called repeatedly with the
     same (window, exclude) key. invalidate() forces a recompute."""
