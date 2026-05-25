@@ -45,9 +45,20 @@ def stats_pulse(
     ann_n = len(list(store.list_annotations()))
     key = ("pulse", parsed, frozenset(exclude), paper_n, ann_n)
 
-    return get_or_compute(
-        key,
-        lambda: compute_pulse(
-            store, window=parsed, exclude_identities=exclude
-        ),
-    )
+    # Sprint 21: histogram the compute time so we can spot the cliff
+    # if the corpus grows past what the in-process aggregator can
+    # sustainably handle. Cache hits skip the timer.
+    def _compute_with_timing() -> dict[str, Any]:
+        try:
+            from rrxiv.server.metrics import pulse_compute_seconds
+
+            with pulse_compute_seconds.time():
+                return compute_pulse(
+                    store, window=parsed, exclude_identities=exclude
+                )
+        except Exception:
+            return compute_pulse(
+                store, window=parsed, exclude_identities=exclude
+            )
+
+    return get_or_compute(key, _compute_with_timing)

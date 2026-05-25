@@ -90,11 +90,25 @@ def rate_limited(retry_after: int) -> ProblemError:
     )
 
 
+def _request_id(request: Request) -> str | None:
+    """Extract the request_id stamped by RequestLoggingMiddleware.
+
+    Echoing it back in the JSON body lets clients quote one ID when
+    they file a bug — the same ID surfaces in fly logs (access line)
+    and on the Sentry event (as the ``request_id`` tag). Three
+    surfaces, one identifier.
+    """
+    state = getattr(request, "state", None)
+    if state is None:
+        return None
+    return getattr(state, "request_id", None)
+
+
 def install_exception_handlers(app: FastAPI) -> None:
     """Attach handlers for ProblemError and pydantic validation."""
 
     @app.exception_handler(ProblemError)
-    async def _handle_problem(_: Request, exc: ProblemError) -> JSONResponse:
+    async def _handle_problem(request: Request, exc: ProblemError) -> JSONResponse:
         body: dict[str, Any] = {
             "type": exc.type,
             "title": exc.title,
@@ -102,6 +116,9 @@ def install_exception_handlers(app: FastAPI) -> None:
             "detail": exc.detail,
         }
         body.update(exc.extra)
+        rid = _request_id(request)
+        if rid:
+            body["request_id"] = rid
         return JSONResponse(
             status_code=exc.status,
             content=body,
@@ -111,18 +128,21 @@ def install_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _handle_validation(
-        _: Request, exc: RequestValidationError
+        request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         # Surface FastAPI's default error breakdown under "errors" so
         # clients can pinpoint the field. We keep the schema close to
         # FastAPI's so OpenAPI consumers aren't surprised.
-        body = {
+        body: dict[str, Any] = {
             "type": PROBLEM_BASE + "validation-error",
             "title": "Validation Error",
             "status": 422,
             "detail": "request body or params failed validation",
             "errors": exc.errors(),
         }
+        rid = _request_id(request)
+        if rid:
+            body["request_id"] = rid
         return JSONResponse(
             status_code=422,
             content=body,
