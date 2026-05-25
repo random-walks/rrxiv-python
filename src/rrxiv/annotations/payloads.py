@@ -97,6 +97,92 @@ class ClaimExtractionPayload(_PayloadBase):
     proposed_claim: dict[str, Any]
 
 
+class RevisionSummaryPayload(_PayloadBase):
+    """Per spec/0006 §revision_summary, refined in Sprint 19.
+
+    Attached to the *newer* paper in a previous_version chain. Servers
+    may synthesise a skeleton from the submission's revision_summary
+    form field (RRP-0017); authors can supersede with a richer entry
+    containing per-claim highlights.
+    """
+
+    previous_version_id: str
+    summary: str
+    highlights: list[dict[str, Any]] | None = None
+
+
+# ---- Retraction-family payloads (RRP-0020 + Sprint 18 paper_retraction) ----
+
+# Sprint 19 — settles the retraction-reason taxonomy from
+# rrxiv:2605.00007 c4 ("Five reason categories cover 94% of historical
+# retractions") plus `superseded_by_revision` for the revision-of case.
+# Both claim and paper retraction share this enum so dedup is easy.
+
+RetractionReason = Literal[
+    "data_error",
+    "methodological_flaw",
+    "fraud",
+    "contamination",
+    "withdrawn_by_author",
+    "superseded_by_revision",
+]
+
+# Sprint 19 — recommended_action lets the server give a downstream reader
+# a one-line "what should I do with this now?" without re-deriving from
+# the reason. Optional.
+RetractionRecommendedAction = Literal[
+    "use_v2",
+    "file_v2",
+    "no_action",
+    "see_replications",
+    "use_superseded_by",
+]
+
+
+class _RetractionPayloadBase(_PayloadBase):
+    """Shared shape for claim and paper retractions.
+
+    The two types differ only in what their parent annotation's
+    `target_id` points at (a claim vs a paper). The payload itself is
+    identical so models that ingest annotations can reuse the same
+    parser.
+    """
+
+    reason: RetractionReason
+    explanation: str | None = Field(
+        default=None,
+        description=(
+            "Plain-text explanation. Optional in v0.1 — the `reason` enum "
+            "carries the load-bearing semantics — but encouraged for "
+            "non-obvious cases like contamination or methodological_flaw."
+        ),
+    )
+    superseded_by_paper: str | None = None
+    superseded_by_claim: str | None = None
+    recommended_action: RetractionRecommendedAction | None = None
+
+
+class ClaimRetractionPayload(_RetractionPayloadBase):
+    """RRP-0020 — author-only fast-path retraction of a single claim.
+
+    The annotation's `target_type` must be `claim`; the server enforces.
+    A non-superseded, non-lifted retraction overrides the derived
+    `replication_status` of the target to `retracted`. A lift is a
+    later `comment` annotation by the same identity with
+    `in_reply_to` pointing at the retraction and
+    `structured_payload.lifts_retraction: true`.
+    """
+
+
+class PaperRetractionPayload(_RetractionPayloadBase):
+    """Sprint 18 — paper-level sibling of claim_retraction. Motivated
+    by rrxiv:2605.00007 c1 ("Retraction is more naturally modelled as
+    an annotation type"). When set, downstream readers should treat the
+    entire paper as retracted, but the v0.1 server does not currently
+    propagate this to per-claim status (each claim is retracted
+    independently via claim_retraction). Future RRP territory."""
+
+
 # ---- Mapping ----
 
 PAYLOAD_MODELS: dict[str, type[BaseModel] | None] = {
@@ -109,6 +195,9 @@ PAYLOAD_MODELS: dict[str, type[BaseModel] | None] = {
     "code_link": CodeLinkPayload,
     "dataset_link": DatasetLinkPayload,
     "claim_extraction": ClaimExtractionPayload,
+    "revision_summary": RevisionSummaryPayload,
+    "claim_retraction": ClaimRetractionPayload,
+    "paper_retraction": PaperRetractionPayload,
 }
 
 

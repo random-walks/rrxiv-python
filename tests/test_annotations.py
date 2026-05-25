@@ -204,6 +204,73 @@ class TestPayloadValidation:
         )
         validate_annotation_payload(ann)
 
+    def test_revision_summary_valid(self) -> None:
+        """RevisionSummaryPayload accepts the RRP-0017 shape."""
+        ann = load_annotation(
+            _base_annotation(
+                annotation_type="revision_summary",
+                structured_payload={
+                    "previous_version_id": "paper-old-123",
+                    "summary": "Fixed off-by-one in Claim 4; reworded c2 statement.",
+                    "highlights": [
+                        {
+                            "kind": "fixed",
+                            "claim_local_id": "prop:I.5",
+                            "description": "Corrected dummy index.",
+                        }
+                    ],
+                },
+            )
+        )
+        validate_annotation_payload(ann)
+
+    def test_claim_retraction_valid(self) -> None:
+        """ClaimRetractionPayload accepts the Sprint 16 dogfood shape."""
+        ann = load_annotation(
+            _base_annotation(
+                annotation_type="claim_retraction",
+                target_type="claim",
+                target_id="paper-x:c1",
+                structured_payload={
+                    "reason": "superseded_by_revision",
+                    "explanation": "v1 was synthetic-era seed content; v2 has substantive prose.",
+                    "superseded_by_paper": "rrxiv:2605.00002",
+                    "superseded_by_claim": "rrxiv:2605.00002:claim:c1",
+                    "recommended_action": "use_superseded_by",
+                },
+            )
+        )
+        validate_annotation_payload(ann)
+
+    def test_claim_retraction_unknown_reason_rejected(self) -> None:
+        """The retraction reason enum is constrained — typos fail closed."""
+        ann = load_annotation(
+            _base_annotation(
+                annotation_type="claim_retraction",
+                target_type="claim",
+                target_id="paper-x:c1",
+                structured_payload={"reason": "ran_out_of_funding"},  # not in enum
+            )
+        )
+        with pytest.raises(AnnotationPayloadError, match="reason"):
+            validate_annotation_payload(ann)
+
+    def test_paper_retraction_valid(self) -> None:
+        """PaperRetractionPayload mirrors ClaimRetractionPayload shape
+        but the annotation's target_type is paper. Sprint 18 / RRP-0021."""
+        ann = load_annotation(
+            _base_annotation(
+                annotation_type="paper_retraction",
+                target_type="paper",
+                target_id="paper-x",
+                structured_payload={
+                    "reason": "data_error",
+                    "explanation": "Authors withdraw following data audit.",
+                },
+            )
+        )
+        validate_annotation_payload(ann)
+
     def test_extra_payload_field_rejected(self) -> None:
         """Per-type payload models forbid extra fields by default."""
         ann = load_annotation(
