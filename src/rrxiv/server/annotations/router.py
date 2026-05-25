@@ -24,6 +24,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, Query, Request
 from pydantic import BaseModel, ValidationError
 
+from rrxiv.server.annotations.threads import list_direct_replies, validate_in_reply_to
 from rrxiv.server.deps import AuthedRequest, get_store, require_identity
 from rrxiv.server.errors import (
     bad_request,
@@ -32,7 +33,6 @@ from rrxiv.server.errors import (
     not_found,
     validation_error,
 )
-from rrxiv.server.annotations.threads import list_direct_replies, validate_in_reply_to
 from rrxiv.server.pagination import paginate
 from rrxiv.server.store import (
     AnonymousIdentity,
@@ -144,6 +144,147 @@ class _IncomingAnnotation(BaseModel):
     model_config = {"extra": "allow"}
 
     id: str | None = None
+
+
+_BULK_MAX_PER_REQUEST = 100
+
+
+@router.post("/bulk", status_code=200)
+async def create_annotations_bulk(
+    body: dict[str, Any],
+    request: Request,
+    auth: AuthedRequest = Depends(_REQUIRES_NAMED_IDENTITY),
+) -> dict[str, Any]:
+    """Post up to 100 annotations in a single request (Sprint 19 P3).
+
+    Body shape: ``{"annotations": [Annotation, Annotation, ...]}``.
+
+    Returns ``{"results": [{"index": N, "status": 201, "body": {...}}
+    | {"index": N, "status": 422, "error": {...}}]}``. Best-effort
+    semantics: each annotation is validated + persisted independently,
+    so a partial success leaves the valid annotations in the store and
+    surfaces the failures per-index. The HTTP status of the bulk call
+    itself is always 200; readers check ``results[i].status``.
+
+    Counts as a **single** request against the per-identity rate limit
+    regardless of payload size. This is the whole point — Sprint 16's
+    44 sequential POSTs tripped the 30-rpm limiter; a single bulk call
+    completes the same work in one budget unit.
+
+    Same auth posture as ``POST /annotations`` (named identity,
+    anonymous forbidden). No idempotency key on the bulk call itself
+    — each inner annotation may carry its own ``id`` for client-side
+    dedup on retries.
+    """
+    if isinstance(auth.identity, AnonymousIdentity):
+        raise forbidden("anonymous identities cannot create annotations")
+
+    raw = body.get("annotations")
+    if not isinstance(raw, list):
+        raise bad_request("body must have an 'annotations' array")
+    if len(raw) == 0:
+        return {"results": []}
+    if len(raw) > _BULK_MAX_PER_REQUEST:
+        raise bad_request(
+            f"bulk accepts at most {_BULK_MAX_PER_REQUEST} annotations per request "
+            f"(got {len(raw)}); split into multiple calls"
+        )
+
+    store: Store = get_store(request)
+
+    from rrxiv.models import Annotation
+
+    results: list[dict[str, Any]] = []
+    for idx, item in enumerate(raw):
+        if not isinstance(item, dict):
+            results.append(
+                {
+                    "index": idx,
+                    "status": 422,
+                    "error": "annotation must be an object",
+                }
+            )
+            continue
+
+        if "id" not in item or not item.get("id"):
+            item["id"] = f"ann-{uuid.uuid4().hex[:10]}"
+        if "created_by" not in item:
+            results.append(
+                {
+                    "index": idx,
+                    "status": 400,
+                    "error": "annotation.created_by is required",
+                }
+            )
+            continue
+
+        try:
+            Annotation.model_validate(item)
+        except ValidationError as e:
+            results.append(
+                {
+                    "index": idx,
+                    "status": 422,
+                    "error": json.loads(e.json()),
+                }
+            )
+            continue
+
+        # Mirror the singleton endpoint's cross-reference checks.
+        target_type = item.get("target_type")
+        target_id = item.get("target_id")
+        if target_type == "claim":
+            if not isinstance(target_id, str) or not _CLAIM_ID_PATTERN.match(
+                target_id
+            ):
+                results.append(
+                    {
+                        "index": idx,
+                        "status": 422,
+                        "error": (
+                            f"target_id {target_id!r} for target_type=claim "
+                            "must match <paper_id>:c<n>"
+                        ),
+                    }
+                )
+                continue
+            if store.get_claim(target_id) is None:
+                results.append(
+                    {
+                        "index": idx,
+                        "status": 404,
+                        "error": f"claim {target_id} not found",
+                    }
+                )
+                continue
+        elif target_type == "paper" and (
+            not isinstance(target_id, str) or store.get_paper(target_id) is None
+        ):
+            results.append(
+                {
+                    "index": idx,
+                    "status": 404,
+                    "error": f"paper {target_id} not found",
+                }
+            )
+            continue
+
+        try:
+            validate_in_reply_to(store, item)
+        except Exception as e:
+            results.append(
+                {
+                    "index": idx,
+                    "status": 400,
+                    "error": str(e),
+                }
+            )
+            continue
+
+        store.add_annotation(item)
+        results.append({"index": idx, "status": 201, "body": item})
+
+    return {"results": results}
 
 
 @router.post("", status_code=201)

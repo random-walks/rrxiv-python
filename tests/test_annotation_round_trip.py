@@ -198,6 +198,78 @@ def test_comment_round_trip_does_not_change_claim_status() -> None:
     sync.close()
 
 
+def test_bulk_endpoint_round_trip() -> None:
+    """POST /annotations/bulk accepts an array and returns per-item
+    results. Counts as ONE request against the rate limit. Sprint 19.P3."""
+    app, sync = _client()
+    claim_id = _seed_paper_with_claim(app, "p-bulk")
+
+    bulk_body = {
+        "annotations": [
+            {
+                "id": _ann_id(),
+                "target_id": claim_id,
+                "target_type": "claim",
+                "annotation_type": "comment",
+                "content": "First comment in batch.",
+                "created_at": "2026-05-25T18:00:00Z",
+                "created_by": {"identity_type": "orcid", "identity": "0000-0001-2345-6789"},
+            },
+            {
+                "id": _ann_id(),
+                "target_id": claim_id,
+                "target_type": "claim",
+                "annotation_type": "claim_retraction",
+                "content": "Retracting via bulk.",
+                "structured_payload": {"reason": "data_error"},
+                "created_at": "2026-05-25T18:00:01Z",
+                "created_by": {"identity_type": "orcid", "identity": "0000-0001-2345-6789"},
+            },
+            # One deliberately bad one — bulk should not abort, just
+            # report per-index status.
+            {
+                "id": _ann_id(),
+                "target_id": "nonexistent:c9",
+                "target_type": "claim",
+                "annotation_type": "comment",
+                "content": "Targets a claim that doesn't exist.",
+                "created_at": "2026-05-25T18:00:02Z",
+                "created_by": {"identity_type": "orcid", "identity": "0000-0001-2345-6789"},
+            },
+        ]
+    }
+    resp = sync.post("/annotations/bulk", json=bulk_body)
+    assert resp.status_code == 200, resp.text
+    results = resp.json()["results"]
+    assert len(results) == 3
+    assert results[0]["status"] == 201
+    assert results[1]["status"] == 201
+    assert results[2]["status"] == 404  # claim missing
+
+    # The retraction took effect (read-side derivation reflects it).
+    derived = sync.get(f"/claims/{claim_id}").json()["replication_status"]
+    assert derived == "retracted", derived
+    sync.close()
+
+
+def test_bulk_endpoint_rejects_oversize() -> None:
+    """Bulk caps at 100 items per request; 101 → 400."""
+    app, sync = _client()
+    _seed_paper_with_claim(app, "p-big")
+    ann = {
+        "id": "x",
+        "target_id": "p-big:c1",
+        "target_type": "claim",
+        "annotation_type": "comment",
+        "content": "x",
+        "created_at": "2026-05-25T18:00:00Z",
+        "created_by": {"identity_type": "orcid", "identity": "0000-0001-2345-6789"},
+    }
+    resp = sync.post("/annotations/bulk", json={"annotations": [ann] * 101})
+    assert resp.status_code == 400, resp.text
+    sync.close()
+
+
 def test_paper_retraction_does_not_cascade_to_claim_status() -> None:
     """A paper_retraction is persisted + listed but doesn't currently
     auto-retract every claim. This pins the v0.1 policy — a future RRP

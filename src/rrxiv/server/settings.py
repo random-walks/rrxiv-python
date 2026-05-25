@@ -52,8 +52,16 @@ class ServerSettings:
     rate_limit_anonymous_read_rpm: int = 120
     rate_limit_orcid_read_rpm: int = 240
     rate_limit_agent_read_rpm: int = 600
-    rate_limit_orcid_write_rpm: int = 30
-    rate_limit_agent_write_rpm: int = 30
+    rate_limit_orcid_write_rpm: int = 60
+    rate_limit_agent_write_rpm: int = 60
+    """Authenticated write limits (Sprint 19 P3): raised from 30 to 60
+    rpm so honest tooling that submits a batch of annotations (e.g. the
+    Sprint 16 retraction dogfood, 44 claims in a row) doesn't trip the
+    limiter at request 31. Bulk submissions via /annotations/bulk count
+    as a single request against this budget regardless of payload size.
+
+    Operators can override via the standard ``RRXIV_RATE_LIMIT_*`` env
+    vars; see `services-setup.md`."""
 
     challenge_ttl_seconds: int = 300
     """Anonymous challenge lifetime."""

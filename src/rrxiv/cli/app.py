@@ -45,9 +45,11 @@ app.add_typer(annotation_app, name="annotation")
 from rrxiv.cli.annotation_post import (  # noqa: E402, I001
     annotation_list as _annotation_list,
     annotation_post as _annotation_post,
+    annotation_post_batch as _annotation_post_batch,
 )
 
 annotation_app.command("post")(_annotation_post)
+annotation_app.command("post-batch")(_annotation_post_batch)
 annotation_app.command("list")(_annotation_list)
 
 # Login subcommands (RRP-0006).

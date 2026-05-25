@@ -419,6 +419,133 @@ def annotation_list(
                 typer.echo(f"      payload.{k} = {v!r}")
 
 
+def annotation_post_batch(
+    file: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            readable=True,
+            help=(
+                "JSON file containing an array of annotation objects, or an "
+                "object with an 'annotations' array. Each entry is validated "
+                "+ persisted independently; partial success is fine."
+            ),
+        ),
+    ],
+    server: Annotated[
+        str,
+        typer.Option("--server", help="API base URL."),
+    ] = DEFAULT_SERVER,
+    identity: Annotated[
+        str | None,
+        typer.Option("--identity", help="'orcid' or 'agent'."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit raw JSON results."),
+    ] = False,
+) -> None:
+    """POST up to 100 annotations in one request via /annotations/bulk.
+
+    Sprint 19.P3 surface. Counts as a single request against the
+    per-identity rate limit regardless of payload size — the Sprint 16
+    pain point (44 sequential POSTs, half tripped the rate limit) is
+    one call here.
+
+    Example::
+
+        # retractions.json contains an array of annotation objects:
+        rrxiv annotation post-batch retractions.json
+    """
+    raw_text = file.read_text(encoding="utf-8")
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        typer.secho(f"FAIL: {file} is not valid JSON: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from e
+
+    # Accept either an array or `{annotations: [...]}`.
+    if isinstance(parsed, list):
+        annotations = parsed
+    elif isinstance(parsed, dict) and isinstance(parsed.get("annotations"), list):
+        annotations = parsed["annotations"]
+    else:
+        typer.secho(
+            "FAIL: batch file must be a JSON array of annotations, or an "
+            "object with an 'annotations' array.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    if not annotations:
+        typer.echo("nothing to do (0 annotations).")
+        return
+
+    resolved = _resolve_identity(server=server, requested=identity)
+    if resolved is None:
+        typer.secho(
+            f"no stored identity for {server!r}. Run 'rrxiv login orcid' or "
+            "'rrxiv login agent' first.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    identity_kind, bearer_token, agent_key = resolved
+    sign_auth = AgentSigningAuth(agent_key) if agent_key is not None else None
+
+    # Fan out across multiple bulk requests if we exceed the per-call cap.
+    bulk_cap = 100
+    batches = [
+        annotations[i : i + bulk_cap] for i in range(0, len(annotations), bulk_cap)
+    ]
+
+    all_results: list[dict[str, Any]] = []
+    with httpx.Client(timeout=120.0) as client:
+        for b_idx, batch in enumerate(batches):
+            if not json_output:
+                typer.echo(
+                    f"==> bulk POST {len(batch)} annotation(s) "
+                    f"({b_idx + 1}/{len(batches)}) -> {server} as {identity_kind}"
+                )
+            resp = client.post(
+                f"{server.rstrip('/')}/annotations/bulk",
+                headers={"Authorization": f"Bearer {bearer_token}"},
+                json={"annotations": batch},
+                auth=sign_auth,
+            )
+            try:
+                rb = resp.json()
+            except json.JSONDecodeError:
+                rb = {"raw": resp.text}
+            if resp.status_code >= 400:
+                typer.secho(
+                    f"FAILED batch {b_idx + 1} status={resp.status_code}",
+                    fg=typer.colors.RED,
+                    err=True,
+                )
+                typer.echo(json.dumps(rb, indent=2), err=True)
+                raise typer.Exit(code=1)
+            all_results.extend(rb.get("results", []))
+
+    if json_output:
+        typer.echo(json.dumps({"results": all_results}, indent=2))
+        return
+
+    n_ok = sum(1 for r in all_results if r.get("status", 0) < 300)
+    n_fail = len(all_results) - n_ok
+    typer.secho(
+        f"bulk posted: {n_ok} ok, {n_fail} failed",
+        fg=typer.colors.GREEN if n_fail == 0 else typer.colors.YELLOW,
+        bold=True,
+    )
+    for r in all_results:
+        if r.get("status", 0) >= 300:
+            typer.echo(
+                f"  [{r.get('index')}] {r.get('status')} {r.get('error')}", err=True
+            )
+
+
 def _looks_like_claim_id(target_id: str) -> bool:
     """Heuristic: claim ids contain ':claim:' or end in :<digits>/c<digits>."""
     if ":claim:" in target_id:
