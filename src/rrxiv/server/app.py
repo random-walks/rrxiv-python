@@ -18,10 +18,12 @@ from rrxiv.server.authors.router import router as authors_router
 from rrxiv.server.claims.router import router as claims_router
 from rrxiv.server.discovery.router import router as discovery_router
 from rrxiv.server.errors import install_exception_handlers
+from rrxiv.server.observability import RequestLoggingMiddleware
 from rrxiv.server.papers.router import router as papers_router
 from rrxiv.server.search.router import router as search_router
 from rrxiv.server.settings import ServerSettings
 from rrxiv.server.snapshots.router import router as snapshots_router
+from rrxiv.server.stats.router import router as stats_router
 from rrxiv.server.store import Store, store_from_url
 from rrxiv.server.submissions.router import (
     router as submissions_router,
@@ -134,8 +136,15 @@ def build_app(
     api.include_router(snapshots_router)
     api.include_router(search_router)
     api.include_router(discovery_router)
+    api.include_router(stats_router)
     api.include_router(authors_router)
     app.include_router(api, prefix=API_PREFIX)
+
+    # Sprint 20 observability: structured JSON access log + identity
+    # context on every request. Toggle via RRXIV_LOG_FORMAT=json. Cheap
+    # enough to keep on always; the middleware skips /metrics + the
+    # 30-second Fly healthcheck on /api/v0/version to avoid log noise.
+    app.add_middleware(RequestLoggingMiddleware)
 
     if settings.enable_cors:
         from fastapi.middleware.cors import CORSMiddleware

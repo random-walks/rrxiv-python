@@ -20,6 +20,7 @@ from rrxiv.models import CIR
 from rrxiv.server.claims.replication import apply_derived_status
 from rrxiv.server.deps import get_store
 from rrxiv.server.errors import not_found
+from rrxiv.server.observability import tag
 from rrxiv.server.pagination import paginate
 from rrxiv.server.papers.diff import compute_revision_diff, papers_in_same_lineage
 from rrxiv.server.papers.projection import compute_stats, to_list_item
@@ -113,6 +114,7 @@ def get_paper(
         description="Comma-separated extras. 'stats' → include the list-item stats projection.",
     ),
 ) -> dict[str, Any]:
+    tag("paper_id", paper_id)
     store: Store = get_store(request)
     paper = _resolve_paper(store, paper_id)
     if paper is None:

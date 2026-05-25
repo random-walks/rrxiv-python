@@ -33,6 +33,7 @@ from rrxiv.server.errors import (
     not_found,
     validation_error,
 )
+from rrxiv.server.observability import tag
 from rrxiv.server.pagination import paginate
 from rrxiv.server.store import (
     AnonymousIdentity,
@@ -298,6 +299,11 @@ async def create_annotation(
 
     if isinstance(auth.identity, AnonymousIdentity):
         raise forbidden("anonymous identities cannot create annotations")
+
+    # Stamp Sentry with the rrxiv-domain context — invaluable when a
+    # 500 fires inside the validation cascade below.
+    tag("annotation_type", body.get("annotation_type"))
+    tag("target_kind", body.get("target_type"))
 
     # Idempotency: if (token, key) is known with the same body, return
     # the cached response. If known with a *different* body, 409.

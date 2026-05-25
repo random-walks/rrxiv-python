@@ -10,6 +10,7 @@ from fastapi import APIRouter, Query, Request
 from rrxiv.server.claims.replication import apply_derived_status
 from rrxiv.server.deps import get_store
 from rrxiv.server.errors import not_found
+from rrxiv.server.observability import tag
 from rrxiv.server.pagination import paginate
 from rrxiv.server.store import Store
 
@@ -97,6 +98,7 @@ def list_top_claims(
 
 @router.get("/{claim_id}")
 def get_claim(claim_id: str, request: Request) -> dict[str, Any]:
+    tag("claim_id", claim_id)
     store: Store = get_store(request)
     c = store.get_claim(claim_id)
     if c is None:

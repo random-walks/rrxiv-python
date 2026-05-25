@@ -18,6 +18,7 @@ from rrxiv.server.errors import (
     rate_limited,
     unauthorized,
 )
+from rrxiv.server.observability import attach_identity_to_scope
 from rrxiv.server.settings import ServerSettings
 from rrxiv.server.store import (
     AgentIdentity,
@@ -119,7 +120,13 @@ def require_identity(*, allow_anonymous: bool = True) -> Callable:  # type: igno
         if count > rpm:
             raise rate_limited(retry_after=1)
 
-        return AuthedRequest(identity=identity, token=token)
+        authed = AuthedRequest(identity=identity, token=token)
+        # Stash on request.state so RequestLoggingMiddleware can read it
+        # for the access-log line; the middleware otherwise has no way
+        # to learn who's calling.
+        request.state.authed = authed
+        attach_identity_to_scope(identity)
+        return authed
 
     return _dep
 
@@ -153,7 +160,10 @@ def optional_identity() -> Callable:  # type: ignore[type-arg]
         if count > rpm:
             raise rate_limited(retry_after=1)
 
-        return AuthedRequest(identity=identity, token=token)
+        authed = AuthedRequest(identity=identity, token=token)
+        request.state.authed = authed
+        attach_identity_to_scope(identity)
+        return authed
 
     return _dep
 
