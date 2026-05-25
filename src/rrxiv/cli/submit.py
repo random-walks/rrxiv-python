@@ -23,7 +23,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import sys
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -33,7 +32,6 @@ import typer
 from rrxiv.cli.credentials import (
     load_agent_key,
     load_bearer,
-    stored_identities_for_server,
 )
 from rrxiv.client.signatures import AgentSigningAuth, AgentSigningKey
 
@@ -169,7 +167,11 @@ def submit(
     try:
         json.loads(cir_bytes.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as e:
-        typer.secho(f"CIR at {cir_path} is not valid UTF-8 JSON: {e}", fg=typer.colors.RED, err=True)
+        typer.secho(
+            f"CIR at {cir_path} is not valid UTF-8 JSON: {e}",
+            fg=typer.colors.RED,
+            err=True,
+        )
         raise typer.Exit(code=2) from e
 
     bundle_hash = hashlib.sha256(bundle_bytes).hexdigest()

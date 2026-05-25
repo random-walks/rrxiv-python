@@ -70,7 +70,7 @@ async def submit_paper(
     - ``pdf``: *optional* rendered PDF. Persisted to the store and
       reachable via ``GET /papers/{id}/pdf``. Without it the submission
       still succeeds, but consumers won't have a PDF download available
-      until a later revision provides one. (Whitepaper v2–v4 dogfooded
+      until a later revision provides one. (Whitepaper v2-v4 dogfooded
       this regression: CIR-only submits left the read-side PDF endpoint
       404'ing. v5 added it; submit.sh now auto-detects build/main.pdf.)
     - ``previous_version``: paper_id of the prior version (revisions only).
