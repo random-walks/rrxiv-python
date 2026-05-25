@@ -336,7 +336,6 @@ def test_pulse_cohorts_bucket_first_writes_by_iso_week() -> None:
     """First-write date for each identity buckets into the ISO week
     of the earliest paper/annotation they authored. The exclude_list
     is honoured."""
-    from datetime import UTC, datetime
 
     store = MemoryStore()
     # 0001 first wrote 2026-W21 (papers).
