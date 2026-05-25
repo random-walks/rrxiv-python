@@ -19,7 +19,7 @@ import os
 import time
 import uuid
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import httpx
 import typer
@@ -99,7 +99,7 @@ def _post_annotation(
             f"{server.rstrip('/')}/annotations",
             headers={"Authorization": f"Bearer {token}"},
             json=annotation,
-            auth=auth,
+            auth=cast("httpx.Auth | None", auth),  # type: ignore[arg-type]
         )
     try:
         body = resp.json()
@@ -512,7 +512,7 @@ def annotation_post_batch(
                 f"{server.rstrip('/')}/annotations/bulk",
                 headers={"Authorization": f"Bearer {bearer_token}"},
                 json={"annotations": batch},
-                auth=sign_auth,
+                auth=cast("httpx.Auth | None", sign_auth),  # type: ignore[arg-type]
             )
             try:
                 rb = resp.json()

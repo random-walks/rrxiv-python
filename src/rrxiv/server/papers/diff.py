@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime as dt
 import difflib
+from collections.abc import Callable
 from typing import Any
 
 from rrxiv.models import CIR, Claim
@@ -332,7 +333,7 @@ def compute_revision_diff(
 
 
 def papers_in_same_lineage(
-    store_get_paper,
+    store_get_paper: Callable[[str], dict[str, Any] | None],
     paper_id_a: str,
     paper_id_b: str,
     *,
