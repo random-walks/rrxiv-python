@@ -37,9 +37,18 @@ app = typer.Typer(
 
 annotation_app = typer.Typer(
     no_args_is_help=True,
-    help="Annotation utilities (load, validate).",
+    help="Annotation utilities: post, list, validate.",
 )
 app.add_typer(annotation_app, name="annotation")
+
+# Annotation POST/list subcommands (Sprint 17).
+from rrxiv.cli.annotation_post import (  # noqa: E402, I001
+    annotation_list as _annotation_list,
+    annotation_post as _annotation_post,
+)
+
+annotation_app.command("post")(_annotation_post)
+annotation_app.command("list")(_annotation_list)
 
 # Login subcommands (RRP-0006).
 from rrxiv.cli.login import login_app  # noqa: E402
@@ -509,6 +518,213 @@ def snapshot_validate(
         for w in report.warnings:
             typer.echo(f"WARN: {w}", err=True)
     typer.echo(f"OK: {tarball} validates as a rrxiv snapshot.")
+
+
+# --- Top-level annotation convenience commands -----------------------
+# These are thin shims over `rrxiv annotation post --type X`. Muscle memory
+# matters when the operation is common — `rrxiv retract <claim>` reads
+# better than `rrxiv annotation post <claim> --type claim_retraction`.
+
+from rrxiv.cli.annotation_post import (  # noqa: E402, I001
+    DEFAULT_SERVER as _ANNOT_DEFAULT_SERVER,
+    annotation_post as _annotation_post_impl,
+)
+
+
+@app.command()
+def retract(
+    target_id: Annotated[
+        str,
+        typer.Argument(
+            help=(
+                "Claim or paper ID to retract. Claim IDs are auto-detected "
+                "(format <paper_id>:<label> or contains ':claim:'); anything "
+                "else is treated as a paper-level retraction."
+            ),
+        ),
+    ],
+    message: Annotated[
+        str,
+        typer.Option(
+            "--message",
+            "-m",
+            help="Explanation of the retraction (required, Markdown allowed).",
+        ),
+    ],
+    reason: Annotated[
+        str,
+        typer.Option(
+            "--reason",
+            help=(
+                "One of: data_error | methodological_flaw | fraud | contamination | "
+                "withdrawn_by_author | superseded_by_revision. (Taxonomy per "
+                "rrxiv:2605.00007 c4 — informational; not yet enforced by the schema.)"
+            ),
+        ),
+    ] = "withdrawn_by_author",
+    superseded_by: Annotated[
+        str | None,
+        typer.Option(
+            "--superseded-by",
+            help="Surviving claim or paper ID (e.g. rrxiv:2605.00001:claim:c1).",
+        ),
+    ] = None,
+    server: Annotated[
+        str,
+        typer.Option("--server", help="API base URL."),
+    ] = _ANNOT_DEFAULT_SERVER,
+    identity: Annotated[
+        str | None,
+        typer.Option("--identity", help="'orcid' or 'agent' (default: first stored)."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit raw JSON."),
+    ] = False,
+) -> None:
+    """Retract a claim or paper.
+
+    Convenience for ``rrxiv annotation post --type
+    {claim,paper}_retraction``. Auto-picks claim_retraction when the
+    target_id looks like a claim id, paper_retraction otherwise. Pass
+    --superseded-by to point at the survivor.
+    """
+    is_claim = ":claim:" in target_id or _looks_claimish(target_id)
+    atype = "claim_retraction" if is_claim else "paper_retraction"
+    fields = [f'reason="{reason}"']
+    if superseded_by:
+        fields.append(f'superseded_by="{superseded_by}"')
+    _annotation_post_impl(
+        target_id=target_id,
+        annotation_type=atype,
+        message=message,
+        content_file=None,
+        target_type="",
+        fields=fields,
+        evidence_links=None,
+        in_reply_to=None,
+        server=server,
+        identity=identity,
+        json_output=json_output,
+    )
+
+
+@app.command()
+def replicate(
+    claim_id: Annotated[
+        str,
+        typer.Argument(help="Claim ID to replicate, e.g. rrxiv:2605.00001:claim:c3."),
+    ],
+    message: Annotated[
+        str,
+        typer.Option("--message", "-m", help="Replication report (Markdown allowed)."),
+    ],
+    outcome: Annotated[
+        str,
+        typer.Option(
+            "--outcome",
+            help="supports | contradicts | partial.",
+        ),
+    ] = "supports",
+    kind: Annotated[
+        str,
+        typer.Option(
+            "--kind",
+            help="reproduction_kind: fresh_replication | re_analysis | computational.",
+        ),
+    ] = "fresh_replication",
+    evidence: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--evidence",
+            help="URI to evidence (notebook, dataset, code). Repeatable.",
+        ),
+    ] = None,
+    server: Annotated[
+        str,
+        typer.Option("--server", help="API base URL."),
+    ] = _ANNOT_DEFAULT_SERVER,
+    identity: Annotated[
+        str | None,
+        typer.Option("--identity", help="'orcid' or 'agent'."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit raw JSON."),
+    ] = False,
+) -> None:
+    """Post a replication annotation against a claim. Convenience for
+    ``rrxiv annotation post --type replication``."""
+    _annotation_post_impl(
+        target_id=claim_id,
+        annotation_type="replication",
+        message=message,
+        content_file=None,
+        target_type="claim",
+        fields=[f'outcome="{outcome}"', f'reproduction_kind="{kind}"'],
+        evidence_links=evidence,
+        in_reply_to=None,
+        server=server,
+        identity=identity,
+        json_output=json_output,
+    )
+
+
+@app.command()
+def comment(
+    target_id: Annotated[
+        str,
+        typer.Argument(help="Paper or claim ID to comment on."),
+    ],
+    message: Annotated[
+        str,
+        typer.Option("--message", "-m", help="Comment text (Markdown allowed)."),
+    ],
+    in_reply_to: Annotated[
+        str | None,
+        typer.Option(
+            "--in-reply-to",
+            help="Annotation ID this comment is replying to (RRP-0018 threads).",
+        ),
+    ] = None,
+    server: Annotated[
+        str,
+        typer.Option("--server", help="API base URL."),
+    ] = _ANNOT_DEFAULT_SERVER,
+    identity: Annotated[
+        str | None,
+        typer.Option("--identity", help="'orcid' or 'agent'."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit raw JSON."),
+    ] = False,
+) -> None:
+    """Post a comment annotation. Convenience for ``rrxiv annotation post --type comment``."""
+    _annotation_post_impl(
+        target_id=target_id,
+        annotation_type="comment",
+        message=message,
+        content_file=None,
+        target_type="",
+        fields=None,
+        evidence_links=None,
+        in_reply_to=in_reply_to,
+        server=server,
+        identity=identity,
+        json_output=json_output,
+    )
+
+
+def _looks_claimish(target_id: str) -> bool:
+    """Pure utility — mirror of annotation_post._looks_like_claim_id, kept
+    local so the top-level shims don't import a private helper."""
+    if ":claim:" in target_id:
+        return True
+    if ":" not in target_id:
+        return False
+    tail = target_id.rsplit(":", 1)[-1]
+    return (tail.startswith("c") and tail[1:].isdigit()) or tail.isdigit()
 
 
 if __name__ == "__main__":
