@@ -69,10 +69,10 @@ def validate_in_reply_to(
         )
 
     new_paper = _paper_id_of_target(
-        body.get("target_id"), body.get("target_type")
+        str(body.get("target_id") or ""), str(body.get("target_type") or "")
     )
     old_paper = _paper_id_of_target(
-        target.get("target_id"), target.get("target_type")
+        str(target.get("target_id") or ""), str(target.get("target_type") or "")
     )
     if new_paper and old_paper and new_paper != old_paper:
         raise HTTPException(

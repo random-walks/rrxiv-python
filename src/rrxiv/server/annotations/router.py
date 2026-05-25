@@ -356,11 +356,15 @@ async def create_annotation(
     try:
         Annotation.model_validate(body)
     except ValidationError as e:
+        first_errors: list[dict[str, Any]] = list(e.errors())  # type: ignore[arg-type]
+        first_msg = (
+            first_errors[0].get("msg", "") if first_errors else ""
+        )
         breadcrumb(
             "annotation",
             "schema validation failed",
             level="warning",
-            data={"first_error": (e.errors() or [{}])[0].get("msg", "")},
+            data={"first_error": first_msg},
         )
         raise validation_error(
             "annotation failed schema validation",

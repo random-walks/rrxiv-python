@@ -607,8 +607,14 @@ def _compute_cohorts(
         cursor -= timedelta(weeks=1)
     week_order.reverse()
     # Dedup while keeping order.
-    seen = set()
-    week_order = [w for w in week_order if not (w in seen or seen.add(w))]
+    deduped: list[str] = []
+    seen_weeks: set[str] = set()
+    for w in week_order:
+        if w in seen_weeks:
+            continue
+        seen_weeks.add(w)
+        deduped.append(w)
+    week_order = deduped
 
     weekly_active_humans = [
         {

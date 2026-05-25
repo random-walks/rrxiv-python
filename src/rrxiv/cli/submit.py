@@ -24,7 +24,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import httpx
 import typer
@@ -240,12 +240,15 @@ def submit(
         )
 
     with httpx.Client(timeout=120.0) as client:
+        # AgentSigningAuth is an httpx.Auth subclass; httpx accepts
+        # None for auth at runtime but the stub's type union excludes
+        # it. type: ignore both branches at the call site.
         resp = client.post(
             f"{server.rstrip('/')}/submissions",
             headers=headers,
             files=files,
             data=data,
-            auth=sign_auth,
+            auth=cast("httpx.Auth | None", sign_auth),  # type: ignore[arg-type]
         )
 
     # ---- Render response ----------------------------------------------

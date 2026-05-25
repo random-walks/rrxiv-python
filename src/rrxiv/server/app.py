@@ -40,7 +40,7 @@ _log = logging.getLogger(__name__)
 _sentry_initialised = False
 
 
-def _sentry_before_send(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] | None:
+def _sentry_before_send(event: Any, hint: dict[str, Any]) -> Any:
     """Filter handled-4xx noise out of Sentry.
 
     The protocol surface raises ``ProblemError`` for expected user

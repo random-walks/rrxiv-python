@@ -59,7 +59,7 @@ except ImportError:  # pragma: no cover - extras guard
     CONTENT_TYPE_LATEST = "text/plain"
     _HAVE_PROM = False
 
-    def generate_latest(*args: Any, **kwargs: Any) -> bytes:  # type: ignore[no-redef,misc]
+    def generate_latest(*args: Any, **kwargs: Any) -> bytes:  # type: ignore[misc]
         return b"# prometheus-client not installed\n"
 
 
