@@ -197,7 +197,11 @@ def _build_claim_figures(
         # rule: include if the reference's path component starts with
         # "figures/" or contains "/figures/". This matches Euclid + the
         # paper template; broader matchers can be added later.
-        if not (ref.startswith("figures/") or "/figures/" in ref or ref.endswith(".tex") and "figure" in ref.lower()):
+        if not (
+            ref.startswith("figures/")
+            or "/figures/" in ref
+            or (ref.endswith(".tex") and "figure" in ref.lower())
+        ):
             continue
         # Resolve the figure path: try the literal ref, then ref + ".tex".
         rel_path = ref if ref.endswith(".tex") else f"{ref}.tex"
@@ -445,6 +449,9 @@ def _build_sections(tex: TexDocument) -> list[dict[str, Any]]:
     return sections
 
 
+_AND_SPLIT_RE = re.compile(r"\s*\\and\s+")
+
+
 def _build_authors(tex: TexDocument) -> list[dict[str, Any]]:
     authors: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -457,11 +464,20 @@ def _build_authors(tex: TexDocument) -> list[dict[str, Any]]:
         clean_name = tex_to_text(a.name).strip()
         if not clean_name:
             continue
-        # Dedup within a single paper, in case the LaTeX repeats \author.
-        if clean_name in seen:
-            continue
-        seen.add(clean_name)
-        authors.append({"name": clean_name})
+        # ``\author{A \and B \and C}`` is the standard single-group form
+        # for multi-author papers (the demo papers in Sprint 14 used it).
+        # tex_to_text doesn't recognise \and (it's a zero-arg separator,
+        # not a wrapping macro), so the literal string survives. Split
+        # here so each piece becomes its own entry.
+        for piece in _AND_SPLIT_RE.split(clean_name):
+            piece = piece.strip()
+            if not piece:
+                continue
+            # Dedup within a single paper, in case the LaTeX repeats \author.
+            if piece in seen:
+                continue
+            seen.add(piece)
+            authors.append({"name": piece})
     if not authors:
         # Required field: minItems=1. If the .tex didn't declare authors,
         # use a placeholder so the CIR is at least constructable.
