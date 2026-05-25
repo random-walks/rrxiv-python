@@ -81,6 +81,14 @@ class ServerSettings:
     ``*`` (suitable for dev_mode). In production set to the deployed web
     origin(s) via ``RRXIV_CORS_ORIGINS=https://rrxiv.org,https://www.rrxiv.org``."""
 
+    exclude_identities: tuple[str, ...] = ()
+    """Identity strings (ORCID iDs, agent handles) to drop from the
+    ``GET /stats/pulse`` activity aggregates. The maintainer's ORCID +
+    any maintainer test agents go here so the pulse reflects *real*
+    community participation. Env: ``RRXIV_EXCLUDE_IDENTITIES`` as a
+    comma-separated list. Empty by default — dev instances report
+    honest numbers without configuration."""
+
     log_level: Literal["debug", "info", "warning", "error"] = "info"
 
     metadata: dict[str, str] = field(default_factory=dict)
@@ -175,6 +183,13 @@ class ServerSettings:
             cors_origins=tuple(
                 o.strip()
                 for o in (get_str_required("CORS_ORIGINS", "") or "").split(",")
+                if o.strip()
+            ),
+            exclude_identities=tuple(
+                o.strip()
+                for o in (
+                    get_str_required("EXCLUDE_IDENTITIES", "") or ""
+                ).split(",")
                 if o.strip()
             ),
         )
