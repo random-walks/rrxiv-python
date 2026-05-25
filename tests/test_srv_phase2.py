@@ -545,9 +545,12 @@ def test_retraction_can_be_lifted() -> None:
             "annotation_type": "claim_retraction",
             "content": "retracting",
             "structured_payload": {
-                "reason": "I thought there was a bug, more than 32 chars now",
-                "kind": "error",
-                "recommended_action": "no_action",
+                # Sprint 19.P1 tightened the payload: reason is a constrained
+                # enum (data_error / methodological_flaw / fraud /
+                # contamination / withdrawn_by_author / superseded_by_revision)
+                # and the free-form rationale moves to `explanation`.
+                "reason": "data_error",
+                "explanation": "I thought there was a bug, more than 32 chars now.",
             },
             "created_at": "2026-05-01T00:00:00Z",
             "created_by": author,
