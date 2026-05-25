@@ -52,6 +52,19 @@ annotation_app.command("post")(_annotation_post)
 annotation_app.command("post-batch")(_annotation_post_batch)
 annotation_app.command("list")(_annotation_list)
 
+# Read-side commands (Sprint 19.P4).
+from rrxiv.cli.read_commands import (  # noqa: E402, I001
+    cli_search as _cli_search,
+    cli_version as _cli_version,
+    claims_app as _claims_app,
+    papers_app as _papers_app,
+)
+
+app.command("version")(_cli_version)
+app.command("search")(_cli_search)
+app.add_typer(_papers_app, name="papers")
+app.add_typer(_claims_app, name="claims")
+
 # Login subcommands (RRP-0006).
 from rrxiv.cli.login import login_app  # noqa: E402
 
