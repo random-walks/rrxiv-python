@@ -478,6 +478,33 @@ def test_discovery_topics_with_counts() -> None:
     assert {"topic": "infrastructure", "count": 1} in items
 
 
+def test_discovery_stats_head_papers_excludes_superseded() -> None:
+    """`/stats` returns head_papers = papers - superseded count.
+
+    Regression for the Sprint 18 home-page confusion: the corpus had
+    20 paper records but only 9 were head-of-lineage; "Showing 9 of 20"
+    on the home page with no Next button looked broken. Now clients
+    can use head_papers to render an honest count.
+    """
+    app, transport = _build_app_and_transport()
+    # Three lineages: v1 superseded by v2 (twice), one standalone.
+    app.state.store.add_paper({**_paper("p1-v1")})
+    app.state.store.add_paper(
+        {**_paper("p1-v2"), "previous_version": "p1-v1"}
+    )
+    app.state.store.add_paper({**_paper("p2-v1")})
+    app.state.store.add_paper(
+        {**_paper("p2-v2"), "previous_version": "p2-v1"}
+    )
+    app.state.store.add_paper(_paper("p3"))  # never revised
+    with httpx.Client(transport=transport, base_url="http://test/api/v0") as c:
+        resp = c.get("/stats")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["papers"] == 5  # total including superseded
+    assert body["head_papers"] == 3  # p1-v2, p2-v2, p3
+
+
 def test_discovery_stats_by_status() -> None:
     app, transport = _build_app_and_transport()
     p1 = _paper("p1")  # preprint — no claims
