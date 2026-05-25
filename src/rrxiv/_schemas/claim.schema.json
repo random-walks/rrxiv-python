@@ -148,6 +148,11 @@
       "type": "boolean",
       "default": false,
       "description": "True if confirmed by paper author or via quorum of credentialed annotators."
+    },
+    "views_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Server-stamped read counter (RRP-0022 / Sprint 22). Bumped on every GET /api/v0/claims/{id}. Only present on read responses — submitters MUST NOT populate this. Drives the `top_claims_by_views` leaderboard in /stats/pulse."
     }
   },
   "$defs": {

@@ -48,6 +48,7 @@ except ImportError:  # pragma: no cover - extras gated
 __all__ = [
     "RequestLoggingMiddleware",
     "attach_identity_to_scope",
+    "breadcrumb",
     "clear_scope_identity",
     "identity_descriptor",
     "tag",
@@ -130,6 +131,36 @@ def tag(name: str, value: str | int | None) -> None:
     if sentry_sdk is None or value is None:
         return
     sentry_sdk.set_tag(name, str(value))
+
+
+def breadcrumb(
+    category: str,
+    message: str,
+    *,
+    level: str = "info",
+    data: dict[str, Any] | None = None,
+) -> None:
+    """Add a Sentry breadcrumb so an error event includes the trail
+    of what happened just before.
+
+    Sprint 22: used in the submission + annotation flows so a 500
+    inside CIR parsing carries "auth resolved → bundle stored →
+    CIR parsed → validation cascade" as context, not just the
+    Python stack. Cheap no-op when sentry-sdk isn't installed.
+
+    Categories MUST stay bounded — use the same string at every
+    call site of the same conceptual step ("submission", "annotation",
+    "store", "auth"). Bounded-cardinality keeps Sentry happy and
+    breadcrumb dashboards filterable.
+    """
+    if sentry_sdk is None:
+        return
+    sentry_sdk.add_breadcrumb(
+        category=category,
+        message=message,
+        level=level,
+        data=data or {},
+    )
 
 
 def _log_format() -> str:

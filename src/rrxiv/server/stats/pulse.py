@@ -27,6 +27,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
+# `timedelta` is already imported via `from datetime import ...` above —
+# the `_compute_cohorts` helper needs both `datetime` and `timedelta`,
+# both already in scope.
 from rrxiv.server.store import Store
 
 PulseWindow = Literal["7d", "30d", "90d", "all"]
@@ -438,6 +441,31 @@ def compute_pulse(
         for cid, cnt in replications_per_claim.most_common(5)
     ]
 
+    # Sprint 22: top-viewed claims, pulled from the per-claim counter
+    # the get_claim handler bumps on every read. Distinct signal from
+    # `top_claims_by_replications` — replications measure *contributed*
+    # engagement (someone re-ran the experiment), views measure
+    # *discovery* engagement (someone looked at it). Both matter.
+    try:
+        claim_views = store.list_claim_views()
+    except Exception:
+        claim_views = {}
+    # Drop counts for claims that no longer exist (e.g. corpus reset
+    # didn't wipe the counter, or a future stat type) so the
+    # leaderboard never surfaces a dead id.
+    live_claim_ids = {c.get("id") for c in data.claims if isinstance(c.get("id"), str)}
+    top_viewed = sorted(
+        (
+            (cid, count)
+            for cid, count in claim_views.items()
+            if cid in live_claim_ids and count > 0
+        ),
+        key=lambda kv: -kv[1],
+    )[:5]
+    top_claims_by_views = [
+        {"id": cid, "views": count} for cid, count in top_viewed
+    ]
+
     topic_counter: Counter[str] = Counter()
     for p in data.papers:
         if p["id"] not in data.head_paper_ids:
@@ -448,6 +476,15 @@ def compute_pulse(
     top_topics = [
         {"topic": t, "count": c} for t, c in topic_counter.most_common(5)
     ]
+
+    # --- Cohorts (Sprint 22) -----------------------------------------------
+    # Pure derivation from existing data — no schema migration. The
+    # first-write date for each identity = min(created_at) over their
+    # papers + annotations. Weekly buckets = ISO calendar week.
+    # The numbers seed cohort analysis: "how many *new* ORCIDs wrote
+    # for the first time last week?" and "WAU-by-week" curves without
+    # waiting for a separate time-series store.
+    cohorts = _compute_cohorts(data, now=now, exclude=exclude)
 
     computed_at = now.isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -488,6 +525,108 @@ def compute_pulse(
         "leaderboards": {
             "top_papers_by_annotations": top_papers,
             "top_claims_by_replications": top_claims,
+            "top_claims_by_views": top_claims_by_views,
             "top_topics": top_topics,
         },
+        "cohorts": cohorts,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Cohort helpers (Sprint 22 — groundwork for retention analysis later)
+# ---------------------------------------------------------------------------
+
+
+def _iso_week_key(dt: datetime) -> str:
+    """ISO-8601 calendar week, e.g. ``2026-W22``. Stable + sortable +
+    locale-independent. Numpy/Pandas not required."""
+    iso = dt.isocalendar()
+    return f"{iso.year:04d}-W{iso.week:02d}"
+
+
+def _compute_cohorts(
+    data: _CoreData,
+    *,
+    now: datetime,
+    exclude: set[str],
+) -> dict[str, Any]:
+    """Two cohort surfaces, both derived from existing data:
+
+    - ``first_write_by_iso_week``: how many *new* identities wrote for
+      the first time in each ISO week. Bucketed map keyed by
+      ``YYYY-Www``.  Empty weeks omitted.
+
+    - ``weekly_active_humans`` / ``weekly_active_agents``: list of
+      ``{iso_week, distinct_identities}`` for the last 8 ISO weeks
+      (inclusive of the current one). Sorted oldest-first so a chart
+      reads left-to-right. Seeds the WAU curve without needing a
+      time-series store.
+
+    Self-exclusion via the same `exclude` set the activity aggregates
+    use: maintainer dogfood writes don't count as "new identities."
+    """
+    # Collect first-write timestamp per identity.
+    first_seen: dict[tuple[str, str], datetime] = {}
+    week_actives: dict[str, dict[str, set[str]]] = {}  # week -> {orcid: set, agent: set}
+
+    cutoff = now - timedelta(weeks=8)
+
+    def _record(kind: str, ident: str, ts: datetime) -> None:
+        key = (kind, ident)
+        if key not in first_seen or ts < first_seen[key]:
+            first_seen[key] = ts
+        if ts >= cutoff:
+            week_key = _iso_week_key(ts)
+            bucket = week_actives.setdefault(week_key, {"orcid": set(), "agent": set()})
+            if kind in bucket:
+                bucket[kind].add(ident)
+
+    for record in [*data.papers, *data.annotations]:
+        desc = _created_by_descriptor(record)
+        if desc is None:
+            continue
+        kind, ident = desc
+        if ident in exclude:
+            continue
+        if kind not in ("orcid", "agent"):
+            continue
+        ts = _parse_iso(record.get("created_at") or record.get("submitted_at"))
+        if ts is None:
+            continue
+        _record(kind, ident, ts)
+
+    first_write_by_iso_week: Counter[str] = Counter()
+    for ts in first_seen.values():
+        first_write_by_iso_week[_iso_week_key(ts)] += 1
+
+    # Last 8 weeks, sorted oldest-first.
+    week_order: list[str] = []
+    cursor = now
+    for _ in range(8):
+        week_order.append(_iso_week_key(cursor))
+        cursor -= timedelta(weeks=1)
+    week_order.reverse()
+    # Dedup while keeping order.
+    seen = set()
+    week_order = [w for w in week_order if not (w in seen or seen.add(w))]
+
+    weekly_active_humans = [
+        {
+            "iso_week": w,
+            "distinct_identities": len(week_actives.get(w, {}).get("orcid", set())),
+        }
+        for w in week_order
+    ]
+    weekly_active_agents = [
+        {
+            "iso_week": w,
+            "distinct_identities": len(week_actives.get(w, {}).get("agent", set())),
+        }
+        for w in week_order
+    ]
+
+    return {
+        "first_write_by_iso_week": dict(first_write_by_iso_week),
+        "weekly_active_humans": weekly_active_humans,
+        "weekly_active_agents": weekly_active_agents,
     }

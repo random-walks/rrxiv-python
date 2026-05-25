@@ -103,7 +103,19 @@ def get_claim(claim_id: str, request: Request) -> dict[str, Any]:
     c = store.get_claim(claim_id)
     if c is None:
         raise not_found(f"claim {claim_id} not found")
-    return apply_derived_status(c, store)
+    # Sprint 22: bump the per-claim view counter and stamp the new
+    # total onto the response. Wrapped in try/except because telemetry
+    # MUST never break a read path — if the store hiccups we still
+    # serve the claim. The leaderboard in /stats/pulse reads from the
+    # same counter so the dashboard sees real engagement.
+    try:
+        views = store.bump_claim_view(claim_id)
+    except Exception:
+        views = 0
+    payload = apply_derived_status(c, store)
+    if isinstance(payload, dict):
+        payload["views_count"] = views
+    return payload
 
 
 def _outgoing(store: Store, claim_id: str, field: str, kind: str) -> list[dict[str, str]]:

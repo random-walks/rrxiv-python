@@ -91,6 +91,21 @@ class MemoryStore:
     def list_claims(self) -> list[dict[str, Any]]:
         return list(self.state.claims.values())
 
+    def bump_claim_view(self, claim_id: str) -> int:
+        # Silently accept bumps for unknown claim_ids; they don't
+        # surface in the leaderboard because the claim doesn't exist
+        # to be ranked. Cheap to count anyway in case the claim is
+        # added later.
+        new_count = self.state.claim_views.get(claim_id, 0) + 1
+        self.state.claim_views[claim_id] = new_count
+        return new_count
+
+    def get_claim_views(self, claim_id: str) -> int:
+        return self.state.claim_views.get(claim_id, 0)
+
+    def list_claim_views(self) -> dict[str, int]:
+        return dict(self.state.claim_views)
+
     # ----- Annotations -----
     def add_annotation(self, ann: dict[str, Any]) -> None:
         self.state.annotations[ann["id"]] = dict(ann)
@@ -158,3 +173,6 @@ class MemoryStore:
         self.state.annotations.clear()
         self.state.sources.clear()
         self.state.rendered_pdfs.clear()
+        # Sprint 22: drop view counts too so the leaderboard doesn't
+        # surface dead claim ids after a corpus reset.
+        self.state.claim_views.clear()

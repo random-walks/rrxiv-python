@@ -33,7 +33,7 @@ from rrxiv.server.errors import (
     not_found,
     validation_error,
 )
-from rrxiv.server.observability import tag
+from rrxiv.server.observability import breadcrumb, tag
 from rrxiv.server.pagination import paginate
 from rrxiv.server.store import (
     AnonymousIdentity,
@@ -319,6 +319,15 @@ async def create_annotation(
     # 500 fires inside the validation cascade below.
     tag("annotation_type", body.get("annotation_type"))
     tag("target_kind", body.get("target_type"))
+    breadcrumb(
+        "annotation",
+        "POST /annotations entered",
+        data={
+            "annotation_type": body.get("annotation_type"),
+            "target_kind": body.get("target_type"),
+            "has_idempotency_key": idempotency_key is not None,
+        },
+    )
 
     # Idempotency: if (token, key) is known with the same body, return
     # the cached response. If known with a *different* body, 409.
@@ -347,10 +356,17 @@ async def create_annotation(
     try:
         Annotation.model_validate(body)
     except ValidationError as e:
+        breadcrumb(
+            "annotation",
+            "schema validation failed",
+            level="warning",
+            data={"first_error": (e.errors() or [{}])[0].get("msg", "")},
+        )
         raise validation_error(
             "annotation failed schema validation",
             extra={"errors": json.loads(e.json())},
         ) from e
+    breadcrumb("annotation", "schema validated")
 
     # Cross-reference target existence + shape (Phase 3).
     target_type = body.get("target_type")
@@ -372,6 +388,7 @@ async def create_annotation(
     validate_in_reply_to(store, body)
 
     store.add_annotation(body)
+    breadcrumb("annotation", "persisted")
 
     # Sprint 21 metric: post-persist so failed annotations don't count.
     try:

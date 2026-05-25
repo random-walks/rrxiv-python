@@ -121,6 +121,24 @@ class Store(Protocol):
     def get_claim(self, claim_id: str) -> dict[str, Any] | None: ...
     def list_claims(self) -> list[dict[str, Any]]: ...
 
+    # ----- Claim view counter (RRP-0023, Sprint 22) -----
+    def bump_claim_view(self, claim_id: str) -> int: ...
+    """Increment the view counter for a claim. Returns the new
+    cumulative count. Idempotent at the per-request level —
+    repeated calls increment, but a single GET /claims/{id} should
+    call this exactly once. Implementations MAY swallow the call
+    on a missing claim_id; callers shouldn't depend on a return
+    value when the claim doesn't exist (return 0 is acceptable)."""
+
+    def get_claim_views(self, claim_id: str) -> int: ...
+    """Read the current view count for a claim, without bumping it.
+    Returns 0 for unknown claim ids."""
+
+    def list_claim_views(self) -> dict[str, int]: ...
+    """Snapshot of every claim_id → view_count pair. Used by
+    /stats/pulse to compute the top-viewed leaderboard without
+    walking the full claims table N times."""
+
     def add_annotation(self, ann: dict[str, Any]) -> None: ...
     def get_annotation(self, ann_id: str) -> dict[str, Any] | None: ...
     def list_annotations(self) -> list[dict[str, Any]]: ...
@@ -194,3 +212,7 @@ class StoreState:
     sources: dict[str, bytes] = field(default_factory=dict)
     rendered_pdfs: dict[str, bytes] = field(default_factory=dict)
     snapshot_blobs: dict[str, bytes] = field(default_factory=dict)
+    # Sprint 22 — per-claim view counter. Bumped by claims/router.get_claim;
+    # surfaced via the `top_claims_by_views` leaderboard in /stats/pulse
+    # and as `views_count` on the claim's read response.
+    claim_views: dict[str, int] = field(default_factory=dict)

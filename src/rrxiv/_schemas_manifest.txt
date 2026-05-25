@@ -3,8 +3,8 @@
 Synced from: /Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv-python/../rrxiv/schema
 Source repo: /Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv
 Branch:      main
-Commit:      1e1fc83e2b1b4454ad41961fdb40c1c9d5184e3b
-Synced at:   2026-05-22T16:48:00Z
+Commit:      e01d5efe08508bfb698805cdeb0f93f1f1e3a020 (dirty working tree)
+Synced at:   2026-05-25T21:56:10Z
 
 Files:
   - annotation.schema.json
@@ -14,6 +14,7 @@ Files:
   - figure.schema.json
   - paper.schema.json
   - paper_list_item.schema.json
+  - pulse_snapshot.schema.json
   - reproducibility_manifest.schema.json
   - revision_diff.schema.json
   - section.schema.json
