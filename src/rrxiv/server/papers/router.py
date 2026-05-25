@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from rrxiv.models import CIR
+from rrxiv.server.claims.replication import apply_derived_status
 from rrxiv.server.deps import get_store
 from rrxiv.server.errors import not_found
 from rrxiv.server.pagination import paginate
@@ -142,14 +143,26 @@ def get_cir(paper_id: str, request: Request) -> dict[str, Any]:
 def list_claims_for_paper(
     paper_id: str, request: Request
 ) -> dict[str, Any]:
-    """Claims registered on the given paper."""
+    """Claims registered on the given paper.
+
+    Applies ``apply_derived_status`` to every returned claim so the
+    ``replication_status`` field reflects current annotation state
+    (replications + retractions per RRP-0019/0020), not whatever the
+    author persisted at submission time. Without this, a v1 record
+    whose claims have been retracted via post-submission annotations
+    would still show ``untested`` to readers — surfaced live when the
+    Sprint 14 v1→v2 dogfood retracted 44 v1 claims and they all kept
+    reading as ``untested``.
+    """
     store: Store = get_store(request)
     paper = _resolve_paper(store, paper_id)
     if paper is None:
         raise not_found(f"paper {paper_id} not found")
     canonical_id = paper["id"]
     items = [
-        c for c in store.list_claims() if c.get("paper_id") == canonical_id
+        apply_derived_status(c, store)
+        for c in store.list_claims()
+        if c.get("paper_id") == canonical_id
     ]
     return {"items": items, "next_cursor": None}
 
