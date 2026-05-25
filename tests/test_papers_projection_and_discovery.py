@@ -383,6 +383,37 @@ def test_papers_claims_endpoint() -> None:
     assert ids == {"p1:c1", "p1:c2"}
 
 
+def test_papers_claims_endpoint_reflects_derived_retraction() -> None:
+    """Regression for the Sprint 14 v1→v2 dogfood: a claim_retraction
+    annotation must surface through /papers/{id}/claims so readers see
+    the derived status, not the persisted one. Before this fix, the
+    route returned raw claims and 44 retraction annotations posted
+    against the v1 records didn't visibly change anything."""
+    app, transport = _build_app_and_transport()
+    app.state.store.add_paper(_paper("p-retr"))
+    app.state.store.add_claim(_claim("p-retr:c1", "p-retr"))
+    # Post-submission retraction annotation by the same identity that
+    # would be the author in the real flow.
+    app.state.store.add_annotation(
+        {
+            "id": "ann-retract-c1",
+            "target_id": "p-retr:c1",
+            "target_type": "claim",
+            "annotation_type": "claim_retraction",
+            "content": "Superseded by p-retr-v2:c1.",
+            "structured_payload": {"reason": "superseded_by_revision"},
+            "created_at": "2026-05-25T18:00:00Z",
+            "created_by": {"identity_type": "agent", "identity": "@deployer"},
+        }
+    )
+    with httpx.Client(transport=transport, base_url="http://test/api/v0") as c:
+        resp = c.get("/papers/p-retr/claims")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) == 1
+    assert items[0]["replication_status"] == "retracted", items[0]
+
+
 def test_papers_related_topic_overlap() -> None:
     app, transport = _build_app_and_transport()
     p1 = _paper("p1")
