@@ -71,6 +71,11 @@ select = ["E", "F", "I", "N", "UP", "B", "RUF"]
 # One-off curation scripts contain large embedded data strings where
 # 100-char wrapping hurts readability.
 "scripts/**/*.py" = ["E501"]
+# The clean.py parser converts LaTeX `--` to `–` (en-dash) by design;
+# the asserts in test_clean.py literally test for that en-dash. RUF001
+# flags both as "ambiguous" but they're the subject of the test.
+"src/rrxiv/parser/clean.py" = ["RUF001"]
+"tests/test_clean.py" = ["RUF001"]
 
 [tool.mypy]
 strict = true

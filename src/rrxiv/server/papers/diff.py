@@ -22,7 +22,6 @@ from typing import Any
 
 from rrxiv.models import CIR, Claim
 
-
 # ---------------------------------------------------------------------------
 # Claim matching
 # ---------------------------------------------------------------------------
@@ -284,7 +283,11 @@ def compute_revision_diff(
             "claim_id": c.id,
             "local_id": claim_local_id(c.id) or "",
             "statement": c.statement,
-            "claim_type": c.claim_type.value if hasattr(c.claim_type, "value") else str(c.claim_type),
+            "claim_type": (
+                c.claim_type.value
+                if hasattr(c.claim_type, "value")
+                else str(c.claim_type)
+            ),
         }
         for c in unmatched_curr
     ]

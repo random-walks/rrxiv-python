@@ -450,7 +450,7 @@ def test_derive_status_replicated_via_quorum() -> None:
     store = MemoryStore()
     # math quorum is 1.
     store.add_paper({"id": "p1", "topics": ["math"]})
-    for i, who in enumerate(["a", "b"]):
+    for i, _who in enumerate(["a", "b"]):
         store.add_annotation(
             {
                 "id": f"ann-rep-{i}",
@@ -520,7 +520,10 @@ def test_derive_status_retracted_by_claim_retraction() -> None:
             "annotation_type": "claim_retraction",
             "content": "author retracting due to bug in proof",
             "structured_payload": {
-                "reason": "Found an off-by-one in the proof; superseded by v2's corrected statement.",
+                "reason": (
+                    "Found an off-by-one in the proof; "
+                    "superseded by v2's corrected statement."
+                ),
                 "kind": "superseded_by_revision",
                 "recommended_action": "use_v2",
             },

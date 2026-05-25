@@ -31,9 +31,11 @@ from rrxiv.models._generated.claim_schema import (
     EvidenceType,
     ExtractedBy,
     ReplicationStatus,
-    Reproducibility as ClaimReproducibility,
     Scope,
     SourceLocation,
+)
+from rrxiv.models._generated.claim_schema import (
+    Reproducibility as ClaimReproducibility,
 )
 from rrxiv.models._generated.figure_schema import Figure
 from rrxiv.models._generated.paper_list_item_schema import (
@@ -51,14 +53,17 @@ from rrxiv.models._generated.paper_schema import (
 )
 from rrxiv.models._generated.reproducibility_manifest_schema import (
     Data as ReproducibilityData,
+)
+from rrxiv.models._generated.reproducibility_manifest_schema import (
     Environment as ReproducibilityEnvironment,
+)
+from rrxiv.models._generated.reproducibility_manifest_schema import (
     ExpectedOutput,
     ReproducibilityManifest,
 )
 from rrxiv.models._generated.revision_diff_schema import (
     AbstractDiff,
     AddedClaim,
-    Claims as RevisionDiffClaims,
     DiffHunk,
     FieldsChangedEnum,
     ModifiedClaim,
@@ -66,6 +71,9 @@ from rrxiv.models._generated.revision_diff_schema import (
     RevisionDiff,
     TextDiff,
     VersionRef,
+)
+from rrxiv.models._generated.revision_diff_schema import (
+    Claims as RevisionDiffClaims,
 )
 from rrxiv.models._generated.section_schema import Section
 from rrxiv.models._generated.submission_request_schema import SubmissionRequest

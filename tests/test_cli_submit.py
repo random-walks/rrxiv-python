@@ -191,7 +191,18 @@ def test_cli_submit_revision_attaches_diff(
         {k: v for k, v in v1.items() if k != "rrxiv_version"}
     )
     app.state.store.add_cir(
-        {**v1, "claims": [{"id": "p-cli-rev-v1:c1", "paper_id": "p-cli-rev-v1", "statement": "Original.", "claim_type": "theoretical", "evidence_type": "argument"}]}
+        {
+            **v1,
+            "claims": [
+                {
+                    "id": "p-cli-rev-v1:c1",
+                    "paper_id": "p-cli-rev-v1",
+                    "statement": "Original.",
+                    "claim_type": "theoretical",
+                    "evidence_type": "argument",
+                }
+            ],
+        }
     )
 
     v2 = _paper(
