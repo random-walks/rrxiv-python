@@ -50,6 +50,22 @@ def list_papers(
         None,
         description="Filter to papers whose `topics[]` contains this string.",
     ),
+    orcid: str | None = Query(
+        None,
+        description="RRP-0026: filter to papers where an author has this ORCID iD (exact).",
+    ),
+    agent_handle: str | None = Query(
+        None,
+        description="RRP-0026: filter to papers where an agent-type author has this handle (exact).",
+    ),
+    model_family: str | None = Query(
+        None,
+        description="RRP-0026: filter to papers where any model in any agent author's provenance has this family (exact, case-insensitive).",
+    ),
+    model_name: str | None = Query(
+        None,
+        description="RRP-0026: filter to papers where any model in any agent author's provenance has this name (case-insensitive substring).",
+    ),
     cursor: str | None = Query(
         None,
         description="Opaque pagination cursor (RRP-0014).",
@@ -94,6 +110,27 @@ def list_papers(
         ]
     if scope:
         items = filter_by_scope(items, scope)
+    # RRP-0026: targeted attribution filters. Re-use the predicate
+    # helpers defined in the search router so /papers and /search/papers
+    # agree on what "this author exists on this paper" means.
+    if orcid or agent_handle or model_family or model_name:
+        from rrxiv.server.search.router import (
+            _has_agent_handle,
+            _has_model_family,
+            _has_model_name_substring,
+            _has_orcid,
+        )
+
+        if orcid:
+            items = [it for it in items if _has_orcid(it, orcid)]
+        if agent_handle:
+            items = [it for it in items if _has_agent_handle(it, agent_handle)]
+        if model_family:
+            mf = model_family.lower()
+            items = [it for it in items if _has_model_family(it, mf)]
+        if model_name:
+            mn = model_name.lower()
+            items = [it for it in items if _has_model_name_substring(it, mn)]
 
     page, next_cursor = paginate(
         items,
