@@ -270,16 +270,79 @@ def _pair_envs_with_sidecar(
     return pairs
 
 
+def _build_label_resolver(
+    tex_envs: tuple[TexEnvironment, ...],
+    paper_id: str,
+) -> dict[str, str]:
+    """Map every labelled TeX env to its canonical paper-prefixed id.
+
+    Authors write edges with whatever short form they used in ``\\label{}``
+    — e.g. ``\\dependson{I.1}{post:1}`` where the source ``I.1`` is the
+    *suffix* of a labelled claim (``\\label{prop:I.1}``) and the target
+    ``post:1`` is the full label of a scope. The resolver maps both
+    forms (bare suffix + full label) to the canonical
+    ``<paper_id>:<label>`` claim/scope id so edge endpoints can be
+    rewritten consistently.
+
+    Disambiguation rule: if two envs share a suffix (e.g. ``prop:I.1``
+    and ``def:I.1``), the *claim* env wins — the convention in Euclid
+    and similar corpora is that bare ``I.1`` refers to the proposition,
+    with definitions / postulates / common notions always written with
+    their explicit prefix.
+    """
+    by_full: dict[str, str] = {}
+    by_suffix_claims: dict[str, str] = {}
+    by_suffix_other: dict[str, str] = {}
+    for env in tex_envs:
+        if not env.label:
+            continue
+        canonical = f"{paper_id}:{env.label}"
+        by_full[env.label] = canonical
+        suffix = env.label.split(":", 1)[1] if ":" in env.label else env.label
+        if env.name == "claim":
+            by_suffix_claims[suffix] = canonical
+        else:
+            # Don't overwrite if a non-claim already won (deterministic
+            # by document order, but unlikely to collide in practice).
+            by_suffix_other.setdefault(suffix, canonical)
+    # Suffix lookup: claim wins over scope/remark.
+    by_suffix: dict[str, str] = {**by_suffix_other, **by_suffix_claims}
+    return {**by_suffix, **by_full}
+
+
+def _resolve_edge_endpoint(
+    raw: str, *, paper_id: str, resolver: dict[str, str]
+) -> str:
+    """Resolve a raw edge endpoint string against the label map.
+
+    Order:
+      1. Already-qualified ``<paper_id>:...`` → return unchanged.
+      2. Label match (full or suffix) → canonical paper-prefixed id.
+      3. Cross-paper id (``other-paper:...``) → return unchanged.
+      4. Bare token → fall back to ``<paper_id>:<raw>`` so the wire
+         format stays stable.
+    """
+    prefix = f"{paper_id}:"
+    if raw.startswith(prefix):
+        return raw
+    if raw in resolver:
+        return resolver[raw]
+    # Looks like another paper's already-qualified id.
+    if ":" in raw and raw.split(":", 1)[0] != paper_id:
+        return raw
+    return f"{paper_id}:{raw}"
+
+
 def _claim_ids_from_edge(
     edge: EdgeMarker, paper_id: str
 ) -> tuple[str, str]:
     """Heuristic mapping from a sidecar edge's source/target strings to
     canonical claim IDs.
 
-    Edges in the sidecar reference user-written IDs from ``\\dependson``
-    etc., which already follow the ``<paper_id>:<label>`` convention.
-    We pass them through unchanged. Cross-paper edges (different
-    paper_id prefix) work too because the convention is the same.
+    Legacy entry point — retained for backward compatibility. The new
+    pipeline uses ``_resolve_edge_endpoint`` with a per-paper label
+    resolver so suffix-form references (``I.1``) reach the canonical
+    claim id (``rrxiv-paper-euclid-elements:prop:I.1``).
     """
     return edge.source, edge.target
 
@@ -295,10 +358,23 @@ def _build_claims(
     pairs = _pair_envs_with_sidecar(tex.environments, sidecar.envs)
     evidence_pairs = _pair_claims_with_evidence(tex.environments)
 
-    # Group edges by source for fast lookup
+    # RRP-0001 / Sprint 26.L: edges in the sidecar carry the raw
+    # ``\dependson{src}{tgt}`` strings, which use the author's local
+    # label shorthand (often the suffix-only form, e.g. ``I.1``
+    # referring to a claim labelled ``prop:I.1``). Resolve through a
+    # label map so both ends become canonical ``<paper_id>:<label>``
+    # ids; this is what unlocks the knowledge-graph DAG for multi-
+    # prefix corpora like Euclid (claims ``prop:*`` depending on
+    # scopes ``post:*`` / ``def:*`` / ``cn:*``).
+    label_resolver = _build_label_resolver(tex.environments, paper_id)
+
+    # Group edges by resolved source id for fast lookup.
     edges_from: dict[str, list[EdgeMarker]] = defaultdict(list)
     for edge in sidecar.edges:
-        edges_from[edge.source].append(edge)
+        resolved_source = _resolve_edge_endpoint(
+            edge.source, paper_id=paper_id, resolver=label_resolver
+        )
+        edges_from[resolved_source].append(edge)
 
     claims: list[dict[str, Any]] = []
     claim_envs = [e for e in tex.environments if e.name == "claim"]
@@ -307,20 +383,24 @@ def _build_claims(
         index = marker.index if marker else f"{len(claims) + 1}"
         cid = _claim_id(paper_id, env, index)
 
-        # Pull edges that reference this claim ID as source
+        # Pull edges whose resolved source matches this claim's
+        # canonical id, then resolve each target the same way.
         depends_on: list[str] = []
         supports: list[str] = []
         contradicts: list[str] = []
         extends: list[str] = []
         for edge in edges_from.get(cid, []):
+            target = _resolve_edge_endpoint(
+                edge.target, paper_id=paper_id, resolver=label_resolver
+            )
             if edge.edge_type == "depends_on":
-                depends_on.append(edge.target)
+                depends_on.append(target)
             elif edge.edge_type == "supports":
-                supports.append(edge.target)
+                supports.append(target)
             elif edge.edge_type == "contradicts":
-                contradicts.append(edge.target)
+                contradicts.append(target)
             elif edge.edge_type == "extends":
-                extends.append(edge.target)
+                extends.append(target)
 
         statement = env.body.strip()
         # Strip out the \label{...} call so the statement is just the body.

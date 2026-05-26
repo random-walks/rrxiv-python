@@ -600,6 +600,14 @@ def parse_tex(tex_source: str) -> TexDocument:
 
 _INPUT_DIRECTIVE_RE = re.compile(r"\\(?:input|include)\s*\{([^}]+)\}")
 
+# `\input{figures/<name>}` directives are *figure references*, not
+# text-include directives — the parser's meaty-claim path picks them
+# up by pattern-matching the literal `\input{}` line inside an
+# evidence body. Inlining them would erase the reference and break
+# Claim.figures extraction. Skip any path that starts with `figures/`
+# (or `fig/`, the older convention from spec/0003).
+_FIGURE_PATH_PREFIXES = ("figures/", "fig/")
+
 
 def read_tex_resolving_inputs(
     path: Path | str,
@@ -621,6 +629,10 @@ def read_tex_resolving_inputs(
         directory.
       - The file extension is optional; ``.tex`` is appended when the
         bare path doesn't exist.
+      - Paths under ``figures/`` (or ``fig/``) are **left as
+        directives** — they're handled by the meaty-claim figure
+        path, which needs the literal ``\\input{figures/...}`` line
+        to survive into the env body so it can be discovered.
       - Cyclic includes are broken at ``max_depth``; missing files are
         replaced with a comment marker so the parse doesn't blow up.
     """
@@ -638,6 +650,9 @@ def read_tex_resolving_inputs(
 
         def _replace(match: re.Match[str]) -> str:
             target = match.group(1).strip()
+            # Figure references stay as directives — see module docstring.
+            if any(target.startswith(prefix) for prefix in _FIGURE_PATH_PREFIXES):
+                return match.group(0)
             # Strip a trailing .tex if the author wrote it; we add it
             # ourselves when missing.
             base = p.parent / target
