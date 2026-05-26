@@ -336,15 +336,26 @@ def compute_pulse(
         for author in p.get("authors") or []:
             if not isinstance(author, dict):
                 continue
-            orcid = author.get("orcid_id")
+            # Schema field name is `orcid` per paper.schema.json Author
+            # (RRP-0021). Old `orcid_id` lookup was a pre-RRP-0021
+            # holdover; fall through both names for back-compat.
+            orcid = author.get("orcid") or author.get("orcid_id")
             if isinstance(orcid, str) and orcid and orcid not in exclude:
                 unique_humans_lifetime.add(orcid)
-            handle = author.get("handle")
+            # Schema field name is `agent_handle` per paper.schema.json
+            # Author (RRP-0021). Same back-compat shim.
+            handle = author.get("agent_handle") or author.get("handle")
             if isinstance(handle, str) and handle and handle not in exclude:
                 # Agents in the author list are first-class participants
                 # per RRP-0021's Author.role taxonomy.
                 role = author.get("role")
-                if role == "agent" or handle.startswith("@"):
+                is_agent = bool(author.get("is_agent"))
+                if (
+                    role == "agent"
+                    or is_agent
+                    or handle.startswith("@")
+                    or handle.startswith("agent:")
+                ):
                     unique_agents_lifetime.add(handle)
 
     papers_with_third_party = 0
