@@ -85,12 +85,29 @@ class EdgeMarker:
 
 
 @dataclass(frozen=True, slots=True)
+class AuthorMarker:
+    """A `RRXIV:author:<n>|key=value|key=value|...` line, emitted by
+    ``rrxiv.cls`` v0.6's ``\\rrxivauthor`` macro (RRP-0021 + RRP-0025).
+
+    ``index`` is the declaration order from the .tex. ``fields`` is a
+    plain dict of the structured keys (name, orcid, role, handle,
+    is_agent, affiliation, email, model_slug, model_family,
+    model_release_date, inference_environment). Empty values are
+    stripped at parse time.
+    """
+
+    index: int
+    fields: dict[str, str]
+
+
+@dataclass(frozen=True, slots=True)
 class Sidecar:
     """All markers parsed from one ``*.rrxiv.aux`` file."""
 
     meta: tuple[MetaMarker, ...]
     envs: tuple[EnvMarker, ...]
     edges: tuple[EdgeMarker, ...]
+    authors: tuple[AuthorMarker, ...] = ()
 
     def meta_dict(self) -> dict[str, str]:
         """Return metadata as a key→value dict. Later markers shadow earlier."""
@@ -115,6 +132,23 @@ def parse_sidecar_text(text: str) -> Sidecar:
     metas: list[MetaMarker] = []
     envs: list[EnvMarker] = []
     edges: list[EdgeMarker] = []
+    authors: list[AuthorMarker] = []
+    # The set of structured-author keys cls v0.6 emits. Anything not on
+    # this list is dropped silently — future cls versions can add new
+    # keys without breaking older parsers.
+    _AUTHOR_KEYS = frozenset((
+        "name",
+        "orcid",
+        "role",
+        "handle",
+        "is_agent",
+        "affiliation",
+        "email",
+        "model_slug",
+        "model_family",
+        "model_release_date",
+        "inference_environment",
+    ))
 
     # Per-call latch: only warn once even if many v0.1 edges appear.
     _v01_deprecation_seen = [False]
@@ -143,6 +177,34 @@ def parse_sidecar_text(text: str) -> Sidecar:
         if head == "meta" and len(parts) >= 3 and parts[1] in _META_KEYS:
             value = ":".join(parts[2:])  # values may contain colons
             metas.append(MetaMarker(key=parts[1], value=value))
+            continue
+
+        if head == "author":
+            # RRXIV:author:<n>|name=...|orcid=...|... — the prefix is
+            # colon-split, so the index is in parts[1] and the rest is
+            # in the original line after the second `:`.
+            if len(parts) < 2:
+                continue
+            try:
+                idx = int(parts[1].split("|", 1)[0])
+            except ValueError:
+                continue
+            suffix = line[len(f"{line_prefix}:author:") :]
+            # suffix is "<n>|name=...|orcid=..."
+            after_idx = suffix.split("|", 1)
+            if len(after_idx) < 2:
+                continue
+            fields: dict[str, str] = {}
+            for kv in after_idx[1].split("|"):
+                if "=" not in kv:
+                    continue
+                key, _, value = kv.partition("=")
+                key = key.strip()
+                value = value.strip()
+                if key in _AUTHOR_KEYS and value:
+                    fields[key] = value
+            if fields:
+                authors.append(AuthorMarker(index=idx, fields=fields))
             continue
 
         if head == "edge" and len(parts) >= 3 and parts[1] in _EDGE_KINDS:
@@ -202,7 +264,12 @@ def parse_sidecar_text(text: str) -> Sidecar:
             stacklevel=2,
         )
 
-    return Sidecar(meta=tuple(metas), envs=tuple(envs), edges=tuple(edges))
+    return Sidecar(
+        meta=tuple(metas),
+        envs=tuple(envs),
+        edges=tuple(edges),
+        authors=tuple(authors),
+    )
 
 
 def parse_sidecar_file(path: Path | str) -> Sidecar:

@@ -167,13 +167,28 @@ def parse(
             help="Path to the .bib file. Default: looks up \\bibliography{NAME} in the .tex.",
         ),
     ] = None,
+    meta: Annotated[
+        Path | None,
+        typer.Option(
+            "--meta",
+            "-m",
+            help=(
+                "Path to rrxiv-meta.json. When present, its `authors` array "
+                "enriches the parser's bare \\author{} names with role / "
+                "is_agent / agent_handle / orcid / provenance fields by "
+                "name-match (RRP-0021 + RRP-0025). Default: auto-detect at "
+                "<paper_root>/rrxiv-meta.json — the project layout convention "
+                "where main.tex lives under paper/ and meta lives at repo root."
+            ),
+        ),
+    ] = None,
     indent: Annotated[
         int,
         typer.Option(help="Indent for the output JSON. 0 for compact."),
     ] = 2,
 ) -> None:
     """Parse a rrxiv-format TeX paper into a CIR JSON object."""
-    cir = build_cir(file, sidecar_path=sidecar, bib_path=bib)
+    cir = build_cir(file, sidecar_path=sidecar, bib_path=bib, meta_path=meta)
     payload = cir.model_dump(mode="json", exclude_none=True)
     text = json.dumps(payload, indent=indent if indent > 0 else None, ensure_ascii=False)
     if output is None:

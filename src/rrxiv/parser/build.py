@@ -452,7 +452,170 @@ def _build_sections(tex: TexDocument) -> list[dict[str, Any]]:
 _AND_SPLIT_RE = re.compile(r"\s*\\and\s+")
 
 
-def _build_authors(tex: TexDocument) -> list[dict[str, Any]]:
+_AUTHOR_SIDECAR_FIELDS: tuple[str, ...] = (
+    "name",
+    "orcid",
+    "role",
+    "handle",
+    "is_agent",
+    "affiliation",
+    "email",
+    "model_slug",
+    "model_family",
+    "model_release_date",
+    "inference_environment",
+)
+
+
+def _parse_sidecar_author_line(line: str) -> dict[str, str] | None:
+    """Parse a ``RRXIV:author:<n>|k1=v1|k2=v2|...`` line emitted by
+    ``rrxiv.cls`` v0.6's ``\\rrxivauthor`` macro into a flat dict.
+
+    Empty values are dropped. Returns ``None`` if the line doesn't
+    match the expected shape.
+    """
+    if not line.startswith("RRXIV:author:"):
+        return None
+    rest = line[len("RRXIV:author:") :]
+    # rest looks like "1|name=...|orcid=...|..."
+    parts = rest.split("|")
+    if not parts or "=" in parts[0]:
+        return None
+    # parts[0] is the author index; ignored — caller's iteration order
+    # is the source of truth for ordering.
+    out: dict[str, str] = {}
+    for p in parts[1:]:
+        if "=" not in p:
+            continue
+        key, _, value = p.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if key and value and key in _AUTHOR_SIDECAR_FIELDS:
+            out[key] = value
+    return out
+
+
+def _parse_meta_json_authors(meta_path: Path | None) -> list[dict[str, Any]]:
+    """Read ``rrxiv-meta.json`` (or the project-root meta) and return
+    its ``authors`` array, or [] if missing / malformed."""
+    if meta_path is None or not meta_path.is_file():
+        return []
+    try:
+        import json
+
+        data = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    raw = data.get("authors")
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in raw:
+        if isinstance(item, dict) and "name" in item:
+            out.append(item)
+    return out
+
+
+def _coerce_author_record(raw: dict[str, Any]) -> dict[str, Any]:
+    """Normalise a meta-json author dict into the CIR Author shape.
+
+    - ``orcid`` becomes the field name expected by the schema.
+    - ``is_agent`` coerces to bool.
+    - ``provenance`` passes through as a dict (validated downstream).
+    - Drop unknown keys to avoid schema noise.
+    """
+    cir_keys = {
+        "name",
+        "orcid",
+        "affiliation",
+        "email",
+        "is_agent",
+        "agent_handle",
+        "role",
+        "provenance",
+    }
+    out: dict[str, Any] = {}
+    for k, v in raw.items():
+        if k not in cir_keys:
+            continue
+        if k == "is_agent":
+            if isinstance(v, str):
+                v = v.lower() in ("true", "1", "yes")
+            else:
+                v = bool(v) if v is not None else False
+        if v is None and k in ("orcid", "affiliation", "email", "agent_handle"):
+            continue  # drop nulls so schema-required fields don't see them
+        out[k] = v
+    return out
+
+
+def _merge_meta_onto_authors(
+    parsed: list[dict[str, Any]],
+    meta_authors: list[dict[str, Any]],
+    *,
+    warn: list[str],
+) -> list[dict[str, Any]]:
+    """Match meta-authors to parsed-tex authors by name and overlay the
+    structured fields. Authors present in meta but not in the parsed
+    set are appended; authors present in parsed but not in meta keep
+    their bare ``{name: ...}`` shape.
+
+    The match is exact-string on ``name`` after stripping. Authors
+    with no match get a warning recorded into ``warn``.
+    """
+    if not meta_authors:
+        return parsed
+
+    by_parsed_name: dict[str, dict[str, Any]] = {a["name"].strip(): a for a in parsed}
+
+    used_meta: set[int] = set()
+    for parsed_author in parsed:
+        target = parsed_author["name"].strip()
+        match_idx: int | None = None
+        for i, m in enumerate(meta_authors):
+            if i in used_meta:
+                continue
+            if str(m.get("name", "")).strip() == target:
+                match_idx = i
+                break
+        if match_idx is None:
+            warn.append(
+                f"parsed author {target!r} has no name-match in rrxiv-meta.json"
+            )
+            continue
+        used_meta.add(match_idx)
+        # Overlay; meta wins for any field it sets, except for `name`
+        # which we keep from the parsed source so a typo in meta doesn't
+        # corrupt the canonical display name.
+        merged = dict(parsed_author)
+        for k, v in _coerce_author_record(meta_authors[match_idx]).items():
+            if k == "name":
+                continue
+            merged[k] = v
+        parsed_author.clear()
+        parsed_author.update(merged)
+
+    # Append meta-authors that had no parsed counterpart (e.g. Heath as
+    # translator on Euclid — not in \author{} but real per RRP-0021).
+    for i, m in enumerate(meta_authors):
+        if i in used_meta:
+            continue
+        coerced = _coerce_author_record(m)
+        if "name" in coerced:
+            parsed.append(coerced)
+            warn.append(
+                f"meta author {coerced['name']!r} appended without a "
+                f"parsed-tex counterpart"
+            )
+
+    return parsed
+
+
+def _build_authors(
+    tex: TexDocument,
+    sidecar_authors: list[dict[str, str]] | None = None,
+    meta_authors: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     authors: list[dict[str, Any]] = []
     seen: set[str] = set()
     for a in tex.authors:
@@ -478,6 +641,66 @@ def _build_authors(tex: TexDocument) -> list[dict[str, Any]]:
                 continue
             seen.add(piece)
             authors.append({"name": piece})
+
+    # Layer 2: sidecar RRXIV:author records from cls v0.6's \rrxivauthor
+    # macro. The cls falls through to authblk's \author{}, so the names
+    # should already appear in `authors` — we just enrich the existing
+    # entry with the structured fields.
+    if sidecar_authors:
+        for sa in sidecar_authors:
+            name = sa.get("name", "").strip()
+            if not name:
+                continue
+            # Locate the matching parsed entry; append if missing.
+            target: dict[str, Any] | None = None
+            for entry in authors:
+                if entry.get("name", "").strip() == name:
+                    target = entry
+                    break
+            if target is None:
+                target = {"name": name}
+                authors.append(target)
+            # Overlay structured fields.
+            if "orcid" in sa:
+                target["orcid"] = sa["orcid"]
+            if "role" in sa:
+                target["role"] = sa["role"]
+            if "handle" in sa:
+                target["agent_handle"] = sa["handle"]
+            if "is_agent" in sa:
+                target["is_agent"] = sa["is_agent"].lower() in ("true", "1", "yes")
+            if "affiliation" in sa:
+                target["affiliation"] = sa["affiliation"]
+            if "email" in sa:
+                target["email"] = sa["email"]
+            # Build a provenance block from any model_* / inference_* keys.
+            prov: dict[str, Any] = {}
+            for k in (
+                "model_slug",
+                "model_family",
+                "model_release_date",
+                "inference_environment",
+            ):
+                if k in sa:
+                    prov[k] = sa[k]
+            if prov:
+                # `model_slug` is required in agent_provenance.schema.json;
+                # only attach the block if we have at least that field.
+                if "model_slug" in prov:
+                    target["provenance"] = prov
+
+    # Layer 3: rrxiv-meta.json (canonical source per RRP-0021 / RRP-0025).
+    # Wins over both LaTeX-parsed bare names and sidecar markers.
+    if meta_authors:
+        warn: list[str] = []
+        authors = _merge_meta_onto_authors(authors, meta_authors, warn=warn)
+        # Warnings are advisory; if the build is silent the parser's
+        # CLI surface emits them as stderr notices.
+        for w in warn:
+            import sys
+
+            print(f"rrxiv parse: WARN {w}", file=sys.stderr)
+
     if not authors:
         # Required field: minItems=1. If the .tex didn't declare authors,
         # use a placeholder so the CIR is at least constructable.
@@ -489,6 +712,7 @@ def build_cir(
     tex_path: Path | str,
     sidecar_path: Path | str | None = None,
     bib_path: Path | str | None = None,
+    meta_path: Path | str | None = None,
 ) -> CIR:
     """Build a CIR from a .tex source.
 
@@ -500,6 +724,13 @@ def build_cir(
         bib_path: Path to the .bib file. Defaults to looking for the
             file referenced in ``\\bibliography{...}`` in the same
             directory as the .tex.
+        meta_path: Path to ``rrxiv-meta.json``. When present, its
+            ``authors`` array enriches the parsed bare ``\\author{}``
+            names with role / is_agent / agent_handle / orcid /
+            provenance fields by name-match (RRP-0021 + RRP-0025).
+            Defaults to auto-detect at ``<tex_root>/../rrxiv-meta.json``
+            — the paper-repo layout convention where ``paper/main.tex``
+            sits next to ``rrxiv-meta.json`` at the repo root.
     """
     tex_path = Path(tex_path)
 
@@ -515,10 +746,29 @@ def build_cir(
         sidecar_path = candidate
     sidecar_path = Path(sidecar_path)
 
+    # Auto-detect rrxiv-meta.json at the paper-repo root if not supplied.
+    if meta_path is None:
+        # Standard layout: paper/main.tex + rrxiv-meta.json at repo root.
+        candidate_meta = tex_path.parent.parent / "rrxiv-meta.json"
+        if candidate_meta.is_file():
+            meta_path = candidate_meta
+        else:
+            # Fallback: a meta.json sibling of the .tex (less common).
+            sibling_meta = tex_path.parent / "rrxiv-meta.json"
+            if sibling_meta.is_file():
+                meta_path = sibling_meta
+    if meta_path is not None:
+        meta_path = Path(meta_path)
+
     tex = parse_tex_file(tex_path)
     sidecar = parse_sidecar_file(sidecar_path)
     meta = sidecar.meta_dict()
     source_map = SourceMap.from_flat_file(tex_path)
+
+    # Layer in RRXIV:author records from cls v0.6's \rrxivauthor (sidecar)
+    # + rrxiv-meta.json (canonical authors[] per RRP-0021).
+    sidecar_authors = [dict(a.fields) for a in sidecar.authors]
+    meta_authors = _parse_meta_json_authors(meta_path)
 
     # Bibliography: prefer explicit path, else look up the first
     # \bibliography{NAME} reference and resolve it as ./NAME.bib, else
@@ -551,7 +801,9 @@ def build_cir(
         "id": paper_id,
         "version": meta.get("version") or tex.metadata.rrxiv_version or "v1",
         "title": tex_to_text(tex.title) if tex.title else "Untitled",
-        "authors": _build_authors(tex),
+        "authors": _build_authors(
+            tex, sidecar_authors=sidecar_authors, meta_authors=meta_authors
+        ),
         "abstract": tex_to_text(tex.abstract) if tex.abstract else "",
         "submitted_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "license": meta.get("license") or tex.metadata.rrxiv_license or "CC-BY-4.0",
