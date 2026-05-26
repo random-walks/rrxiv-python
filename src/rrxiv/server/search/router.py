@@ -37,7 +37,23 @@ def search_papers(
     ),
     author: str | None = Query(
         default=None,
-        description="Substring match against author name or ORCID.",
+        description="Substring match against author name or ORCID (legacy; prefer the targeted filters).",
+    ),
+    orcid: str | None = Query(
+        default=None,
+        description="RRP-0026: exact match against author.orcid.",
+    ),
+    agent_handle: str | None = Query(
+        default=None,
+        description="RRP-0026: exact match against author.agent_handle.",
+    ),
+    model_family: str | None = Query(
+        default=None,
+        description="RRP-0026: exact match against any provenance.models[].family (lowercase).",
+    ),
+    model_name: str | None = Query(
+        default=None,
+        description="RRP-0026: case-insensitive substring match against any provenance.models[].name.",
     ),
     status: str | None = Query(
         default=None,
@@ -77,6 +93,16 @@ def search_papers(
     if author:
         a_needle = author.lower()
         pool = [item for item in pool if _author_match(item, a_needle, author)]
+    if orcid:
+        pool = [item for item in pool if _has_orcid(item, orcid)]
+    if agent_handle:
+        pool = [item for item in pool if _has_agent_handle(item, agent_handle)]
+    if model_family:
+        mf = model_family.lower()
+        pool = [item for item in pool if _has_model_family(item, mf)]
+    if model_name:
+        mn = model_name.lower()
+        pool = [item for item in pool if _has_model_name_substring(item, mn)]
     if status:
         pool = [
             item for item in pool if (item.get("stats") or {}).get("status") == status
@@ -176,5 +202,65 @@ def _author_match(item: dict[str, Any], needle_lower: str, needle_raw: str) -> b
         if needle_lower in name.lower():
             return True
         if orcid and needle_raw in orcid:
+            return True
+    return False
+
+
+# RRP-0026: targeted filter helpers — exact-match for ORCID + agent_handle
+# + model_family; substring for model_name.
+
+
+def _has_orcid(item: dict[str, Any], orcid_id: str) -> bool:
+    for author in item.get("authors") or []:
+        if isinstance(author, dict) and (author.get("orcid") == orcid_id):
+            return True
+    return False
+
+
+def _has_agent_handle(item: dict[str, Any], handle: str) -> bool:
+    for author in item.get("authors") or []:
+        if isinstance(author, dict) and (author.get("agent_handle") == handle):
+            return True
+    return False
+
+
+def _iter_provenance_models(item: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten every ModelDescriptor across every agent author."""
+    out: list[dict[str, Any]] = []
+    for author in item.get("authors") or []:
+        if not isinstance(author, dict):
+            continue
+        prov = author.get("provenance")
+        if not isinstance(prov, dict):
+            continue
+        models = prov.get("models")
+        if isinstance(models, list):
+            for m in models:
+                if isinstance(m, dict):
+                    out.append(m)
+        # RRP-0025 back-compat: synthesise a single-model descriptor
+        # from flat fields if `models` is absent.
+        elif "model_slug" in prov or "model_family" in prov:
+            synth: dict[str, Any] = {}
+            if prov.get("model_slug"):
+                synth["name"] = prov["model_slug"]
+                synth["release_pin"] = prov["model_slug"]
+            if prov.get("model_family"):
+                synth["family"] = prov["model_family"]
+            if synth:
+                out.append(synth)
+    return out
+
+
+def _has_model_family(item: dict[str, Any], family_lower: str) -> bool:
+    for m in _iter_provenance_models(item):
+        if (m.get("family") or "").lower() == family_lower:
+            return True
+    return False
+
+
+def _has_model_name_substring(item: dict[str, Any], needle_lower: str) -> bool:
+    for m in _iter_provenance_models(item):
+        if needle_lower in (m.get("name") or "").lower():
             return True
     return False

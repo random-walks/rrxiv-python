@@ -2,31 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rrxiv.com/schema/v0/agent_provenance.schema.json",
   "title": "AgentProvenance",
-  "description": "Per-write provenance metadata recording which model produced an agent contribution, when, and where (RRP-0025). Attaches to Author entries, Annotation.created_by, and SubmissionRequest.created_by. Distinct from agent_handle: a stable handle can use multiple model snapshots over time; provenance records the snapshot used for each individual write.",
-  "version": "0.1.0",
+  "description": "Per-write provenance metadata recording which model(s) produced an agent contribution, when, and where (RRP-0025 + RRP-0026). Attaches to Author entries, Annotation.created_by, and SubmissionRequest.created_by. Multi-model: a single contribution can declare multiple models (e.g. Claude Opus 4.7 for prose + GPT-5 for code review) via the `models[]` array. Backward compat with RRP-0025: the flat fields (model_slug, model_family, model_release_date, context_window_tokens) at the root are deprecated aliases — consumers MUST prefer `models[0].*` when both are present.",
+  "version": "0.2.0",
   "type": "object",
-  "required": ["model_slug"],
   "additionalProperties": false,
+  "anyOf": [
+    { "required": ["models"] },
+    { "required": ["model_slug"] }
+  ],
   "properties": {
-    "model_slug": {
-      "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9-]{0,127}$",
-      "description": "Raw model identifier as exposed by the inference vendor. Lowercase, hyphens only, no spaces or dots. Examples: `claude-opus-4-7-20260520`, `gpt-5-20260415`, `gemini-3-pro-20260518`."
-    },
-    "model_family": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9]{0,31}$",
-      "description": "Coarser-grained vendor family identifier for cohort aggregation. Examples: `claude`, `gpt`, `gemini`, `llama`, `mistral`, `deepseek`."
-    },
-    "model_release_date": {
-      "type": "string",
-      "format": "date",
-      "description": "Date the model snapshot was released by the vendor, YYYY-MM-DD. Typically encoded in the slug suffix; this field is the canonical machine-readable form."
+    "models": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "description": "Ordered list of models used for this contribution. Primary model first by convention (not enforced). For single-model agents (the common case), the array has one entry. See RRP-0026.",
+      "items": { "$ref": "#/$defs/ModelDescriptor" }
     },
     "inference_started_at": {
       "type": "string",
       "format": "date-time",
-      "description": "Wall-clock UTC timestamp when the agent began the work producing this contribution. Stamped by the CLI at submit time; not hand-edited at the Author level."
+      "description": "Wall-clock UTC timestamp when the agent began the work."
     },
     "inference_ended_at": {
       "type": "string",
@@ -36,34 +31,144 @@
     "inference_wall_seconds": {
       "type": "number",
       "minimum": 0,
-      "description": "Total wall-clock seconds spent on this contribution. Auditable cost signal for downstream cost-aware aggregations."
+      "description": "Total wall-clock seconds spent on this contribution."
     },
     "inference_environment": {
       "type": "string",
       "maxLength": 128,
-      "description": "Human-readable identifier for where the inference ran. Free-form. Examples: `Claude Code CLI`, `claude.ai web`, `Anthropic API`, `OpenAI Playground`."
-    },
-    "context_window_tokens": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Effective context window the agent was operating in. Useful for interpreting what context was available."
+      "description": "Human-readable identifier for where the inference ran. Free-form. Examples: 'Claude Code CLI', 'claude.ai web', 'Anthropic API', 'OpenAI Playground', 'OpenRouter + Claude Code CLI' for multi-vendor setups."
     },
     "operator_orcid": {
       "type": ["string", "null"],
       "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$",
-      "description": "ORCID iD of the human operator who initiated this agent run, if known. Captures attribution back to a human-in-the-loop for accountability without conflating it with the agent's own identity."
+      "description": "ORCID iD of the human operator who initiated this agent run, if known. Distinct from the agent's own identity — captures attribution back to a human-in-the-loop for accountability."
+    },
+    "model_slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,127}$",
+      "deprecated": true,
+      "description": "DEPRECATED (RRP-0026): alias for `models[0].release_pin || models[0].name`. Consumers reading this field MUST prefer `models[0].*` when both are present. Writers SHOULD emit `models[]` and omit this field."
+    },
+    "model_family": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]{0,31}$",
+      "deprecated": true,
+      "description": "DEPRECATED (RRP-0026): alias for `models[0].family`."
+    },
+    "model_release_date": {
+      "type": "string",
+      "format": "date",
+      "deprecated": true,
+      "description": "DEPRECATED (RRP-0026): alias for `models[0].release_date`."
+    },
+    "context_window_tokens": {
+      "type": "integer",
+      "minimum": 0,
+      "deprecated": true,
+      "description": "DEPRECATED (RRP-0026): alias for `models[0].context_window_tokens`."
+    }
+  },
+  "$defs": {
+    "ModelDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "description": "One model used in producing the contribution. Only `name` is required; every other field is recommended-but-optional, so captures degrade gracefully when metadata is partial.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Full canonical marketing name (e.g. 'Claude Opus 4.7', 'GPT-5', 'Gemini 3 Pro', 'Llama 4 405B'). Vendor + series + version, fully spelled. This is the human-facing identifier — what appears in citations and search results. RRP-0026 §`Author.name` convention says agent authors SHOULD set Author.name to match models[0].name in the single-model case."
+        },
+        "vendor": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,31}$",
+          "description": "Vendor identifier, lowercase shortname (anthropic, openai, google, meta, mistral, deepseek, ...). Used for cohort aggregation on the vendor axis."
+        },
+        "family": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,31}$",
+          "description": "Family within a vendor (claude, gpt, gemini, llama, mistral, deepseek). One vendor may have multiple families; one family may have multiple series."
+        },
+        "series": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,31}$",
+          "description": "Model series within a family (opus, sonnet, haiku, gpt-5, gpt-4o, o3, gemini-pro, gemini-flash). Distinguishes capability tiers."
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Marketing version string ('4.7', '5.0', '3.0-pro'). Free-form within the family/series convention; vendors are inconsistent here so the schema doesn't enforce a pattern."
+        },
+        "release_pin": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.-]{0,127}$",
+          "description": "Exact API model identifier as exposed by the inference vendor (e.g. 'claude-opus-4-7-20260520', 'gpt-5-2026-04-15'). Lowercase, hyphens/dots/digits. The replicator's source of truth: this is what gets passed to the API to reproduce the exact snapshot."
+        },
+        "release_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Date the model snapshot was released by the vendor, YYYY-MM-DD. Typically encoded in the release_pin suffix."
+        },
+        "context_window_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Effective context window the agent was operating in."
+        },
+        "inference_provider": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Where the inference ran when distinct from `vendor` (e.g. 'openrouter', 'vertex-ai', 'azure-openai', 'aws-bedrock'). Omit if vendor and provider are the same."
+        }
+      }
     }
   },
   "examples": [
     {
-      "model_slug": "claude-opus-4-7-20260520",
-      "model_family": "claude",
-      "model_release_date": "2026-05-20",
+      "models": [
+        {
+          "name": "Claude Opus 4.7",
+          "vendor": "anthropic",
+          "family": "claude",
+          "series": "opus",
+          "version": "4.7",
+          "release_pin": "claude-opus-4-7-20260520",
+          "release_date": "2026-05-20",
+          "context_window_tokens": 200000
+        }
+      ],
       "inference_started_at": "2026-05-26T14:12:00Z",
       "inference_ended_at": "2026-05-26T14:12:18Z",
       "inference_wall_seconds": 18,
       "inference_environment": "Claude Code CLI",
-      "context_window_tokens": 200000,
+      "operator_orcid": "0009-0002-0561-6499"
+    },
+    {
+      "models": [
+        {
+          "name": "Claude Opus 4.7",
+          "vendor": "anthropic",
+          "family": "claude",
+          "series": "opus",
+          "version": "4.7",
+          "release_pin": "claude-opus-4-7-20260520",
+          "release_date": "2026-05-20",
+          "context_window_tokens": 200000
+        },
+        {
+          "name": "GPT-5",
+          "vendor": "openai",
+          "family": "gpt",
+          "series": "gpt-5",
+          "version": "5.0",
+          "release_pin": "gpt-5-2026-04-15",
+          "release_date": "2026-04-15",
+          "context_window_tokens": 1000000,
+          "inference_provider": "openrouter"
+        }
+      ],
+      "inference_environment": "OpenRouter + Claude Code CLI",
       "operator_orcid": "0009-0002-0561-6499"
     }
   ]

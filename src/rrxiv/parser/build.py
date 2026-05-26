@@ -460,11 +460,121 @@ _AUTHOR_SIDECAR_FIELDS: tuple[str, ...] = (
     "is_agent",
     "affiliation",
     "email",
-    "model_slug",
+    # RRP-0026 ModelDescriptor fields (cls v0.7+):
+    "model_name",
+    "model_vendor",
     "model_family",
+    "model_series",
+    "model_version",
+    "model_release_pin",
     "model_release_date",
+    # RRP-0025 flat aliases (cls v0.6, deprecated — lifted into
+    # models[0] downstream):
+    "model_slug",
+    # Inference-time:
     "inference_environment",
 )
+
+
+# RRP-0026: ModelDescriptor sub-fields, used to lift sidecar/flat
+# entries into a structured models[] array.
+_MODEL_DESCRIPTOR_FIELDS: tuple[str, ...] = (
+    "name",
+    "vendor",
+    "family",
+    "series",
+    "version",
+    "release_pin",
+    "release_date",
+    "context_window_tokens",
+    "inference_provider",
+)
+
+
+def _provenance_from_sidecar(sa: dict[str, str]) -> dict[str, Any] | None:
+    """Build a RRP-0026 provenance block from a single sidecar author
+    record. Returns None if no model fields are present.
+
+    Single-model: cls v0.7's \\rrxivauthor only emits one model per call,
+    so we always produce ``models=[{...}]`` with one entry. Multi-model
+    authors are declared via rrxiv-meta.json instead.
+    """
+    descriptor: dict[str, Any] = {}
+    # cls v0.7 fields first.
+    if "model_name" in sa:
+        descriptor["name"] = sa["model_name"]
+    if "model_vendor" in sa:
+        descriptor["vendor"] = sa["model_vendor"]
+    if "model_family" in sa:
+        descriptor["family"] = sa["model_family"]
+    if "model_series" in sa:
+        descriptor["series"] = sa["model_series"]
+    if "model_version" in sa:
+        descriptor["version"] = sa["model_version"]
+    if "model_release_pin" in sa:
+        descriptor["release_pin"] = sa["model_release_pin"]
+    elif "model_slug" in sa:
+        # v0.6 deprecated alias lift.
+        descriptor["release_pin"] = sa["model_slug"]
+        if "name" not in descriptor:
+            # Lifted-from-flat case: use the slug as a fallback name so
+            # the required ModelDescriptor.name still gets populated.
+            descriptor["name"] = sa["model_slug"]
+    if "model_release_date" in sa:
+        descriptor["release_date"] = sa["model_release_date"]
+
+    if not descriptor:
+        return None
+
+    # Ensure `name` is set — required field.
+    if "name" not in descriptor:
+        descriptor["name"] = descriptor.get("release_pin") or "unknown-model"
+
+    prov: dict[str, Any] = {"models": [descriptor]}
+    if "inference_environment" in sa:
+        prov["inference_environment"] = sa["inference_environment"]
+    return prov
+
+
+def _lift_flat_provenance(prov: dict[str, Any]) -> dict[str, Any]:
+    """RRP-0026 compat: if a provenance block has flat RRP-0025 fields
+    (model_slug, model_family, model_release_date, context_window_tokens)
+    but no `models[]` array, lift them into a single-element models[].
+
+    Idempotent: if `models[]` is already present, return unchanged.
+    """
+    if "models" in prov and isinstance(prov.get("models"), list) and prov["models"]:
+        return prov  # already canonical shape
+
+    flat_pin = prov.get("model_slug")
+    flat_family = prov.get("model_family")
+    flat_date = prov.get("model_release_date")
+    flat_ctx = prov.get("context_window_tokens")
+    if not (flat_pin or flat_family or flat_date or flat_ctx):
+        return prov  # no flat fields either — nothing to lift
+
+    descriptor: dict[str, Any] = {}
+    if flat_pin:
+        descriptor["release_pin"] = flat_pin
+        descriptor["name"] = flat_pin  # best-effort fallback; meta-author
+        # entries that want a proper marketing name SHOULD set
+        # models[0].name explicitly instead of relying on this lift.
+    if flat_family:
+        descriptor["family"] = flat_family
+    if flat_date:
+        descriptor["release_date"] = flat_date
+    if isinstance(flat_ctx, int):
+        descriptor["context_window_tokens"] = flat_ctx
+    if "name" not in descriptor:
+        descriptor["name"] = "unknown-model"
+
+    lifted = dict(prov)
+    lifted["models"] = [descriptor]
+    # Drop the now-redundant flat fields so downstream consumers don't
+    # have to reconcile two shapes.
+    for k in ("model_slug", "model_family", "model_release_date", "context_window_tokens"):
+        lifted.pop(k, None)
+    return lifted
 
 
 def _parse_sidecar_author_line(line: str) -> dict[str, str] | None:
@@ -521,7 +631,8 @@ def _coerce_author_record(raw: dict[str, Any]) -> dict[str, Any]:
 
     - ``orcid`` becomes the field name expected by the schema.
     - ``is_agent`` coerces to bool.
-    - ``provenance`` passes through as a dict (validated downstream).
+    - ``provenance`` passes through as a dict; RRP-0025-shaped flat
+      fields (model_slug etc.) are lifted into models[0] per RRP-0026.
     - Drop unknown keys to avoid schema noise.
     """
     cir_keys = {
@@ -545,6 +656,8 @@ def _coerce_author_record(raw: dict[str, Any]) -> dict[str, Any]:
                 v = bool(v) if v is not None else False
         if v is None and k in ("orcid", "affiliation", "email", "agent_handle"):
             continue  # drop nulls so schema-required fields don't see them
+        if k == "provenance" and isinstance(v, dict):
+            v = _lift_flat_provenance(v)
         out[k] = v
     return out
 
@@ -642,10 +755,10 @@ def _build_authors(
             seen.add(piece)
             authors.append({"name": piece})
 
-    # Layer 2: sidecar RRXIV:author records from cls v0.6's \rrxivauthor
-    # macro. The cls falls through to authblk's \author{}, so the names
-    # should already appear in `authors` — we just enrich the existing
-    # entry with the structured fields.
+    # Layer 2: sidecar RRXIV:author records from cls v0.6/v0.7
+    # \rrxivauthor macro. The cls falls through to authblk's \author{},
+    # so the names should already appear in `authors` — we just enrich
+    # the existing entry with the structured fields.
     if sidecar_authors:
         for sa in sidecar_authors:
             name = sa.get("name", "").strip()
@@ -673,21 +786,12 @@ def _build_authors(
                 target["affiliation"] = sa["affiliation"]
             if "email" in sa:
                 target["email"] = sa["email"]
-            # Build a provenance block from any model_* / inference_* keys.
-            prov: dict[str, Any] = {}
-            for k in (
-                "model_slug",
-                "model_family",
-                "model_release_date",
-                "inference_environment",
-            ):
-                if k in sa:
-                    prov[k] = sa[k]
-            if prov:
-                # `model_slug` is required in agent_provenance.schema.json;
-                # only attach the block if we have at least that field.
-                if "model_slug" in prov:
-                    target["provenance"] = prov
+            # RRP-0026: build a structured provenance block with models[]
+            # from the sidecar's model_* fields. Single-model only at the
+            # cls level; multi-model is via rrxiv-meta.json.
+            prov = _provenance_from_sidecar(sa)
+            if prov is not None:
+                target["provenance"] = prov
 
     # Layer 3: rrxiv-meta.json (canonical source per RRP-0021 / RRP-0025).
     # Wins over both LaTeX-parsed bare names and sidecar markers.

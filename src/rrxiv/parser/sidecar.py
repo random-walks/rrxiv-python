@@ -133,9 +133,11 @@ def parse_sidecar_text(text: str) -> Sidecar:
     envs: list[EnvMarker] = []
     edges: list[EdgeMarker] = []
     authors: list[AuthorMarker] = []
-    # The set of structured-author keys cls v0.6 emits. Anything not on
-    # this list is dropped silently — future cls versions can add new
-    # keys without breaking older parsers.
+    # The set of structured-author keys the cls emits. Includes both
+    # the v0.6 (RRP-0025) flat fields and the v0.7 (RRP-0026)
+    # ModelDescriptor fields. Anything not on this list is dropped
+    # silently — future cls versions can add new keys without
+    # breaking older parsers.
     _AUTHOR_KEYS = frozenset((
         "name",
         "orcid",
@@ -144,9 +146,17 @@ def parse_sidecar_text(text: str) -> Sidecar:
         "is_agent",
         "affiliation",
         "email",
-        "model_slug",
+        # RRP-0026 ModelDescriptor fields (cls v0.7+):
+        "model_name",
+        "model_vendor",
         "model_family",
+        "model_series",
+        "model_version",
+        "model_release_pin",
         "model_release_date",
+        # RRP-0025 flat aliases (cls v0.6, deprecated):
+        "model_slug",  # ← model_release_pin
+        # Inference-time fields (provenance root, not per-model):
         "inference_environment",
     ))
 
