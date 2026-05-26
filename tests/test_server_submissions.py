@@ -341,11 +341,25 @@ def test_search_papers_matches_title_and_abstract() -> None:
     assert ids == ["p1"]
 
 
-def test_search_papers_empty_query_rejected() -> None:
-    _, sync, _ = _client_with_orcid_bearer()
+def test_search_papers_empty_query_returns_all(
+) -> None:
+    """RRP-0028: empty q is the default-match behaviour, not an error."""
+    app, sync, _ = _client_with_orcid_bearer()
+    app.state.store.add_paper({
+        "id": "p1",
+        "id_slug": "rrxiv:2605.00091",
+        "version": "v1",
+        "title": "Test",
+        "submitted_at": "2026-05-26T18:00:00Z",
+        "abstract": "test",
+        "authors": [{"name": "Anyone"}],
+        "license": "CC-BY-4.0",
+        "source": {"format": "latex", "uri": "/x.tar.gz"},
+    })
     resp = sync.get("/search/papers", params={"q": " "})
     sync.close()
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert any(p["id"] == "p1" for p in resp.json()["items"])
 
 
 def test_search_claims_matches_statement() -> None:

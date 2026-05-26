@@ -115,22 +115,43 @@ def list_papers(
     # agree on what "this author exists on this paper" means.
     if orcid or agent_handle or model_family or model_name:
         from rrxiv.server.search.router import (
+            _csv_or_split,
             _has_agent_handle,
             _has_model_family,
             _has_model_name_substring,
             _has_orcid,
         )
 
+        # RRP-0028: comma-separated values OR-combine. Single value is the
+        # n=1 case.
         if orcid:
-            items = [it for it in items if _has_orcid(it, orcid)]
+            ids = _csv_or_split(orcid)
+            if ids:
+                items = [it for it in items if any(_has_orcid(it, i) for i in ids)]
         if agent_handle:
-            items = [it for it in items if _has_agent_handle(it, agent_handle)]
+            handles = _csv_or_split(agent_handle)
+            if handles:
+                items = [
+                    it
+                    for it in items
+                    if any(_has_agent_handle(it, h) for h in handles)
+                ]
         if model_family:
-            mf = model_family.lower()
-            items = [it for it in items if _has_model_family(it, mf)]
+            families = [f.lower() for f in _csv_or_split(model_family)]
+            if families:
+                items = [
+                    it
+                    for it in items
+                    if any(_has_model_family(it, f) for f in families)
+                ]
         if model_name:
-            mn = model_name.lower()
-            items = [it for it in items if _has_model_name_substring(it, mn)]
+            needles_mn = [n.lower() for n in _csv_or_split(model_name)]
+            if needles_mn:
+                items = [
+                    it
+                    for it in items
+                    if any(_has_model_name_substring(it, n) for n in needles_mn)
+                ]
 
     page, next_cursor = paginate(
         items,
