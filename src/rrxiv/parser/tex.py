@@ -25,6 +25,7 @@ properly handled by the AST — no source contamination.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -597,6 +598,67 @@ def parse_tex(tex_source: str) -> TexDocument:
     )
 
 
+_INPUT_DIRECTIVE_RE = re.compile(r"\\(?:input|include)\s*\{([^}]+)\}")
+
+
+def read_tex_resolving_inputs(
+    path: Path | str,
+    *,
+    max_depth: int = 16,
+) -> str:
+    """Return the .tex source with ``\\input{...}`` / ``\\include{...}``
+    directives recursively inlined.
+
+    Multi-file papers (Euclid's ``main.tex`` → ``books/book01.tex`` …)
+    used to silently drop their claim envs because the parser only saw
+    ``main.tex`` and never followed ``\\input{}``. Resolving inline
+    here keeps the rest of the parser (which scans environments on a
+    flat source string) unchanged.
+
+    Resolution rules:
+      - ``\\input{path}`` and ``\\include{path}`` are both honoured.
+      - Paths are resolved relative to the *importing* file's
+        directory.
+      - The file extension is optional; ``.tex`` is appended when the
+        bare path doesn't exist.
+      - Cyclic includes are broken at ``max_depth``; missing files are
+        replaced with a comment marker so the parse doesn't blow up.
+    """
+    root_path = Path(path).resolve()
+
+    def _read(p: Path, depth: int, seen: set[Path]) -> str:
+        if depth > max_depth or p in seen:
+            return f"% rrxiv-parser: skipped {p.name} (cycle or depth>{max_depth})\n"
+        try:
+            text = p.read_text(encoding="utf-8")
+        except OSError:
+            return f"% rrxiv-parser: missing {p.name}\n"
+
+        next_seen = seen | {p}
+
+        def _replace(match: re.Match[str]) -> str:
+            target = match.group(1).strip()
+            # Strip a trailing .tex if the author wrote it; we add it
+            # ourselves when missing.
+            base = p.parent / target
+            candidates = [base, base.with_suffix(".tex")]
+            chosen = next((c for c in candidates if c.is_file()), None)
+            if chosen is None:
+                return f"% rrxiv-parser: missing \\input{{{target}}}\n"
+            return _read(chosen, depth + 1, next_seen)
+
+        return _INPUT_DIRECTIVE_RE.sub(_replace, text)
+
+    return _read(root_path, 0, set())
+
+
 def parse_tex_file(path: Path | str) -> TexDocument:
-    """Read and parse a .tex file."""
-    return parse_tex(Path(path).read_text(encoding="utf-8"))
+    """Read and parse a .tex file, recursively resolving ``\\input{}``.
+
+    Sprint 26.K: multi-file LaTeX papers (Euclid's Elements, split
+    across 13 book files via ``\\input{books/bookNN}``) used to lose
+    every claim env because the parser only saw ``main.tex``. We now
+    inline the included files first so the downstream environment
+    scan sees the full document.
+    """
+    return parse_tex(read_tex_resolving_inputs(path))
