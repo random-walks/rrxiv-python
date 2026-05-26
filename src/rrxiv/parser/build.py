@@ -449,7 +449,179 @@ def _build_claims(
             claim["source_location"] = source_loc
 
         claims.append(claim)
+
+    # Sprint 26.M: materialize scope + remark envs as foundational
+    # claims so every node in the knowledge graph has a detail page.
+    # Without this, Euclid's postulates / definitions / common notions
+    # show up as edges' endpoints but have no /claims/{id} route, so
+    # users clicking them from the DAG get a 404.
+    foundational = _build_foundational_claims(
+        tex,
+        paper_id=paper_id,
+        edges_from=edges_from,
+        label_resolver=label_resolver,
+        source_map=source_map,
+    )
+    claims.extend(foundational)
     return claims
+
+
+# Title-prefix → (claim_type, evidence_type) discriminator. Order
+# matters — first match wins. Anything not matched falls back to the
+# env-name default below.
+_FOUNDATIONAL_TITLE_RULES: tuple[tuple[str, tuple[str, str]], ...] = (
+    ("definition", ("definitional", "definition")),
+    ("postulate", ("theoretical", "convention")),
+    ("common notion", ("theoretical", "convention")),
+    ("axiom", ("theoretical", "convention")),
+    ("lemma", ("theoretical", "argument")),
+    ("corollary", ("theoretical", "argument")),
+    ("remark", ("theoretical", "argument")),
+)
+
+# Fallback by env name (scope vs remark).
+_FOUNDATIONAL_ENV_DEFAULT: dict[str, tuple[str, str]] = {
+    "scope": ("definitional", "definition"),
+    "remark": ("theoretical", "convention"),
+}
+
+
+def _classify_foundational(
+    env: TexEnvironment, *, title_override: str | None = None,
+) -> tuple[str, str]:
+    """Map a scope/remark env to (claim_type, evidence_type).
+
+    Uses the env's title (`\\begin{scope}[Definition I.1: point]`)
+    when present — the title prefix is the most reliable signal. Falls
+    back to env-name defaults when title is absent or unrecognised.
+    """
+    title = (title_override or env.title or "").strip().lower()
+    for prefix, kinds in _FOUNDATIONAL_TITLE_RULES:
+        if title.startswith(prefix):
+            return kinds
+    kind = tex_env_to_sidecar_kind(env.name)
+    return _FOUNDATIONAL_ENV_DEFAULT.get(kind, ("theoretical", "convention"))
+
+
+def _build_foundational_claims(
+    tex: TexDocument,
+    *,
+    paper_id: str,
+    edges_from: dict[str, list[EdgeMarker]],
+    label_resolver: dict[str, str],
+    source_map: SourceMap,
+) -> list[dict[str, Any]]:
+    """Emit Claim records for scope + remark envs that carry a label.
+
+    Postulates, definitions, and common notions in Euclid are encoded
+    as ``\\begin{scope}`` / ``\\begin{rrxivremark}`` envs because they
+    aren't *checkable* assertions in the replication sense. But they
+    are first-class nodes in the knowledge graph (claims depend on
+    them), so they need ``/claims/{id}`` routes. This walker
+    materialises them as Claim records with the foundational
+    ``claim_type``/``evidence_type`` pair so the UI can render them
+    correctly while the schema stays unchanged (no new enum values).
+    """
+    out: list[dict[str, Any]] = []
+    for env in tex.environments:
+        # The LaTeX class uses ``\\begin{rrxivremark}`` for remarks
+        # (postulates + common notions in Euclid); the AST keeps the
+        # raw env name. Normalise via sidecar_kind so both spellings
+        # ("rrxivremark", "remark") match.
+        kind = tex_env_to_sidecar_kind(env.name)
+        if kind not in {"scope", "remark"}:
+            continue
+        if not env.label:
+            # Unlabelled scopes (e.g. an inline ``\begin{scope}``
+            # used for figure framing) aren't addressable; skip.
+            continue
+        cid = f"{paper_id}:{env.label}"
+        # _classify_foundational uses the title for its prefix rules;
+        # for remark envs the title lives inline in the body and we
+        # extract it below — peek now so the classifier doesn't fall
+        # to the env-name default and miscategorise postulates as
+        # "theoretical, convention" when they should pick up the
+        # postulate rule.
+        body_for_title = env.body.strip()
+        title_peek = env.title
+        if title_peek is None:
+            m = re.match(r"^\[([^\[\]\n]+)\]\s*", body_for_title)
+            if m:
+                title_peek = m.group(1)
+        claim_type, evidence_type = _classify_foundational(env, title_override=title_peek)
+
+        # The pylatexenc walker doesn't register ``rrxivremark`` as a
+        # title-bearing macro, so `\begin{rrxivremark}[Postulate~1]`
+        # lands the optional arg INLINE at the top of env.body
+        # (`[Postulate~1]\n\label{post:1}\n...`). Pull that bracket
+        # prefix off the body before tex-to-text cleaning so it
+        # becomes the env's effective title instead of leaking into
+        # the statement.
+        raw_body = env.body.strip()
+        effective_title: str | None = env.title
+        if effective_title is None:
+            bracket_match = re.match(r"^\[([^\[\]\n]+)\]\s*", raw_body)
+            if bracket_match:
+                effective_title = bracket_match.group(1).strip()
+                raw_body = raw_body[bracket_match.end() :]
+
+        if env.label:
+            raw_body = raw_body.replace(f"\\label{{{env.label}}}", "").strip()
+        statement = tex_to_text(raw_body)
+        if not statement:
+            continue
+
+        # Edges *from* a foundational node are rare but possible
+        # (e.g. one definition extending another). Same resolution
+        # path as claim envs.
+        depends_on: list[str] = []
+        supports: list[str] = []
+        contradicts: list[str] = []
+        extends: list[str] = []
+        for edge in edges_from.get(cid, []):
+            target = _resolve_edge_endpoint(
+                edge.target, paper_id=paper_id, resolver=label_resolver
+            )
+            if edge.edge_type == "depends_on":
+                depends_on.append(target)
+            elif edge.edge_type == "supports":
+                supports.append(target)
+            elif edge.edge_type == "contradicts":
+                contradicts.append(target)
+            elif edge.edge_type == "extends":
+                extends.append(target)
+
+        record: dict[str, Any] = {
+            "id": cid,
+            "paper_id": paper_id,
+            "statement": statement,
+            "claim_type": claim_type,
+            "evidence_type": evidence_type,
+            "extracted_by": "author",
+            "canonical": True,
+        }
+        if effective_title:
+            # Normalise `~` (LaTeX non-breaking space) to a regular
+            # space so the wire payload is plain prose.
+            record["title"] = tex_to_text(effective_title)
+        if depends_on:
+            record["depends_on"] = depends_on
+        if supports:
+            record["supports"] = supports
+        if contradicts:
+            record["contradicts"] = contradicts
+        if extends:
+            record["extends"] = extends
+
+        # No evidence pairing for foundational nodes — they don't
+        # ship with a separate proof block. Source-location still
+        # comes from the env span itself.
+        source_loc = _build_source_location(env, None, source_map)
+        if source_loc:
+            record["source_location"] = source_loc
+
+        out.append(record)
+    return out
 
 
 def _build_citations(
