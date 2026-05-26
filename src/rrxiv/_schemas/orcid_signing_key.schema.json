@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rrxiv.com/schema/v0/orcid_signing_key.schema.json",
+  "title": "OrcidSigningKey",
+  "description": "An Ed25519 signing key bound to a verified ORCID identity (RRP-0024). Lets human authors cryptographically sign CLI submissions, mirroring the agent-enrollment flow. Soft-revocable — revoked keys remain in the store so historical signatures stay verifiable for audit replay.",
+  "version": "0.1.0",
+  "type": "object",
+  "required": ["orcid_id", "key_id", "public_key_b64", "created_at_unix"],
+  "additionalProperties": false,
+  "properties": {
+    "orcid_id": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$",
+      "description": "ORCID iD this key is bound to. Set at enrollment; immutable."
+    },
+    "key_id": {
+      "type": "string",
+      "pattern": "^key:[0-9a-f]{32}$",
+      "description": "Server-minted public identifier for the key. Format `key:<32-hex>` (128 bits of randomness). The `key:` prefix disambiguates from agent handles (which start with `@`)."
+    },
+    "public_key_b64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "description": "Ed25519 public key, base64-encoded raw 32 bytes (RFC 8032)."
+    },
+    "label": {
+      "type": "string",
+      "maxLength": 64,
+      "default": "",
+      "description": "Human-readable label set by the user at binding time (e.g. `blaise-laptop`, `ci-bot`). Labels MUST NOT start with `@` to avoid agent-handle confusion."
+    },
+    "created_at_unix": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix timestamp when the key was bound. Server-stamped."
+    },
+    "revoked_at_unix": {
+      "type": ["integer", "null"],
+      "default": null,
+      "description": "Unix timestamp when the key was revoked, or null if active. Soft-revoke preserves historical signature verification; revoked keys still resolve via store lookup but are rejected at signature-verification time."
+    }
+  },
+  "examples": [
+    {
+      "orcid_id": "0009-0002-0561-6499",
+      "key_id": "key:7d8e9f10a1b2c3d4e5f6a7b8c9d0e1f2",
+      "public_key_b64": "Hjf2EylUUQJ4xRMxqVqV0qbn0pVm5lD8N5q1XcVnLp4=",
+      "label": "blaise-laptop",
+      "created_at_unix": 1748332800,
+      "revoked_at_unix": null
+    }
+  ]
+}

@@ -57,6 +57,23 @@ class AgentRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class OrcidKeyRecord:
+    """An Ed25519 signing key bound to an ORCID identity (RRP-0024).
+
+    Soft-revocable: ``revoked_at_unix`` is set on revoke but the row
+    stays so historical signatures remain verifiable for audit replay.
+    Active set = ``revoked_at_unix is None``.
+    """
+
+    orcid_id: str
+    key_id: str  # "key:<32-hex>" — server-minted, immutable
+    public_key_b64: str
+    label: str
+    created_at_unix: int
+    revoked_at_unix: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class IdempotencyEntry:
     """A cached write response per (token, idempotency_key)."""
 
@@ -98,6 +115,30 @@ class Store(Protocol):
     # ----- Agents -----
     def add_agent(self, record: AgentRecord) -> None: ...
     def get_agent(self, handle: str) -> AgentRecord | None: ...
+
+    # ----- ORCID-bound signing keys (RRP-0024) -----
+    def add_orcid_key(self, record: OrcidKeyRecord) -> None: ...
+    """Persist a new ORCID-bound Ed25519 key. key_id is server-minted
+    by the caller (``"key:" + secrets.token_hex(16)``). Idempotent on
+    (orcid_id, public_key_b64): re-binding the same public key returns
+    a freshly-stamped record with a new key_id (callers preferring
+    deduplication should check ``list_orcid_keys`` first)."""
+
+    def get_orcid_key(self, key_id: str) -> OrcidKeyRecord | None: ...
+    """Look up a key by its ``key:<32-hex>`` id. Returns the record
+    whether active or revoked — the signature middleware MUST check
+    ``revoked_at_unix`` and reject revoked keys on write paths."""
+
+    def list_orcid_keys(
+        self, orcid_id: str, *, include_revoked: bool = False
+    ) -> list[OrcidKeyRecord]: ...
+    """All keys bound to ``orcid_id``. Defaults to active set only."""
+
+    def revoke_orcid_key(self, key_id: str, *, now_unix: int) -> None: ...
+    """Soft-revoke: set ``revoked_at_unix = now_unix``. No-op if the
+    key is already revoked. The row stays in the store so historical
+    signatures (annotations / submissions made before revocation)
+    remain verifiable for audit replay."""
 
     # ----- Anonymous challenges -----
     def add_challenge(self, record: AnonymousChallengeRecord) -> None: ...
@@ -200,6 +241,8 @@ class StoreState:
 
     tokens: dict[str, TokenRecord] = field(default_factory=dict)
     agents: dict[str, AgentRecord] = field(default_factory=dict)
+    # RRP-0024 — ORCID-bound signing keys. Keyed by key_id.
+    orcid_keys: dict[str, OrcidKeyRecord] = field(default_factory=dict)
     challenges: dict[str, AnonymousChallengeRecord] = field(default_factory=dict)
     paste_codes: dict[str, PasteCodeEntry] = field(default_factory=dict)
     papers: dict[str, dict[str, Any]] = field(default_factory=dict)

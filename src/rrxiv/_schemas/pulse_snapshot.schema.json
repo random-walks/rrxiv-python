@@ -156,6 +156,27 @@
           "type": "integer",
           "minimum": 0
         },
+        "unique_agent_cohorts_lifetime": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Distinct (agent_handle, model_slug) tuples observed across all annotations + paper authors[]. A 'cohort' is one handle pinned to one model snapshot. One handle used with 3 model versions over time = 3 cohorts. Excluded identities are filtered out. See RRP-0025."
+        },
+        "agent_models_in_use": {
+          "type": "array",
+          "maxItems": 10,
+          "description": "Top-N agent model snapshots by write count across the corpus. Lets dashboards render 'who's actively using what model'. See RRP-0025.",
+          "items": {
+            "type": "object",
+            "required": ["model_slug", "writes"],
+            "properties": {
+              "model_slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$" },
+              "model_family": { "type": ["string", "null"] },
+              "writes": { "type": "integer", "minimum": 0 },
+              "first_seen_unix": { "type": ["integer", "null"], "minimum": 0 }
+            },
+            "additionalProperties": true
+          }
+        },
         "papers_with_third_party_engagement": {
           "type": "integer",
           "minimum": 0,

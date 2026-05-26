@@ -24,6 +24,7 @@ from rrxiv.server.store.protocol import (
     IdempotencyEntry,
     Identity,
     OrcidIdentity,
+    OrcidKeyRecord,
     PasteCodeEntry,
     TokenRecord,
 )
@@ -94,6 +95,19 @@ CREATE TABLE IF NOT EXISTS claim_views (
   claim_id TEXT PRIMARY KEY,
   count    INTEGER NOT NULL DEFAULT 0
 );
+
+-- Sprint 24 / RRP-0024: ORCID-bound Ed25519 signing keys. Soft-revoke
+-- semantics: revoked_at_unix NULL = active; set = tombstoned. Revoked
+-- rows stay so historical signatures still verify.
+CREATE TABLE IF NOT EXISTS orcid_keys (
+  key_id          TEXT PRIMARY KEY,
+  orcid_id        TEXT NOT NULL,
+  public_key_b64  TEXT NOT NULL,
+  label           TEXT NOT NULL DEFAULT '',
+  created_at_unix INTEGER NOT NULL,
+  revoked_at_unix INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_orcid_keys_orcid ON orcid_keys(orcid_id);
 """
 
 
@@ -213,6 +227,77 @@ class SqliteStore:
             contact=row[2],
             enrolled_at_unix=int(row[3]),
         )
+
+    # ----- ORCID-bound signing keys (RRP-0024) -----
+    def add_orcid_key(self, record: OrcidKeyRecord) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO orcid_keys"
+                "(key_id, orcid_id, public_key_b64, label, created_at_unix, "
+                "revoked_at_unix) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    record.key_id,
+                    record.orcid_id,
+                    record.public_key_b64,
+                    record.label,
+                    record.created_at_unix,
+                    record.revoked_at_unix,
+                ),
+            )
+            self._conn.commit()
+
+    def get_orcid_key(self, key_id: str) -> OrcidKeyRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT key_id, orcid_id, public_key_b64, label, "
+                "created_at_unix, revoked_at_unix FROM orcid_keys "
+                "WHERE key_id = ?",
+                (key_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return OrcidKeyRecord(
+            key_id=row[0],
+            orcid_id=row[1],
+            public_key_b64=row[2],
+            label=row[3] or "",
+            created_at_unix=int(row[4]),
+            revoked_at_unix=(int(row[5]) if row[5] is not None else None),
+        )
+
+    def list_orcid_keys(
+        self, orcid_id: str, *, include_revoked: bool = False
+    ) -> list[OrcidKeyRecord]:
+        sql = (
+            "SELECT key_id, orcid_id, public_key_b64, label, "
+            "created_at_unix, revoked_at_unix FROM orcid_keys "
+            "WHERE orcid_id = ?"
+        )
+        if not include_revoked:
+            sql += " AND revoked_at_unix IS NULL"
+        sql += " ORDER BY created_at_unix DESC"
+        with self._lock:
+            rows = self._conn.execute(sql, (orcid_id,)).fetchall()
+        return [
+            OrcidKeyRecord(
+                key_id=row[0],
+                orcid_id=row[1],
+                public_key_b64=row[2],
+                label=row[3] or "",
+                created_at_unix=int(row[4]),
+                revoked_at_unix=(int(row[5]) if row[5] is not None else None),
+            )
+            for row in rows
+        ]
+
+    def revoke_orcid_key(self, key_id: str, *, now_unix: int) -> None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE orcid_keys SET revoked_at_unix = ? "
+                "WHERE key_id = ? AND revoked_at_unix IS NULL",
+                (now_unix, key_id),
+            )
+            self._conn.commit()
 
     # ----- Anonymous challenges -----
     def add_challenge(self, record: AnonymousChallengeRecord) -> None:

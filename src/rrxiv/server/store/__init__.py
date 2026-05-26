@@ -20,6 +20,7 @@ from rrxiv.server.store.protocol import (
     IdempotencyEntry,
     Identity,
     OrcidIdentity,
+    OrcidKeyRecord,
     Store,
     TokenRecord,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "Identity",
     "MemoryStore",
     "OrcidIdentity",
+    "OrcidKeyRecord",
     "SqliteStore",
     "Store",
     "TokenRecord",

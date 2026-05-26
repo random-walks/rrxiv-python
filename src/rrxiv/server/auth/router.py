@@ -21,9 +21,11 @@ import time
 import uuid
 from base64 import b64decode
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
+
+from rrxiv.server.deps import AuthedRequest, require_identity
 
 from rrxiv.server.auth.templates import (
     render_anonymous_hcaptcha,
@@ -43,6 +45,7 @@ from rrxiv.server.store import (
     AgentRecord,
     AnonymousIdentity,
     OrcidIdentity,
+    OrcidKeyRecord,
     Store,
     TokenRecord,
 )
@@ -344,6 +347,198 @@ def orcid_exchange_paste(
 # ----------------------------- Agent enrollment -----------------------------
 
 _HANDLE_PATTERN = r"^@[a-z0-9][-a-z0-9]{0,31}$"
+
+
+# ----------------------------- ORCID key binding (RRP-0024) -----------------------------
+
+
+class OrcidKeyBindBody(BaseModel):
+    """POST /auth/orcid/keys request body.
+
+    The signature MUST be over the base64-encoded canonical payload
+    (the ``payload_b64`` string as ASCII bytes, not its decoded JSON).
+    Mirrors the agent-enroll proof-of-possession pattern.
+
+    Canonical payload (decoded from ``payload_b64``):
+        {
+          "purpose": "orcid_key_binding",
+          "orcid_id": "<ORCID iD of the calling bearer>",
+          "public_key_b64": "<same as outer field>",
+          "issued_at_unix": <int, ±300s from server time>,
+          "nonce": "<128-bit-random-hex>"
+        }
+    """
+
+    public_key_b64: str
+    label: str = Field(default="", max_length=64)
+    payload_b64: str
+    signature_b64: str
+
+
+class OrcidKeyRecordResponse(BaseModel):
+    """Wire shape of an ORCID-bound key record (schema/orcid_signing_key)."""
+
+    orcid_id: str
+    key_id: str
+    public_key_b64: str
+    label: str
+    created_at_unix: int
+    revoked_at_unix: int | None = None
+
+
+def _orcid_key_record_to_response(rec: OrcidKeyRecord) -> OrcidKeyRecordResponse:
+    return OrcidKeyRecordResponse(
+        orcid_id=rec.orcid_id,
+        key_id=rec.key_id,
+        public_key_b64=rec.public_key_b64,
+        label=rec.label,
+        created_at_unix=rec.created_at_unix,
+        revoked_at_unix=rec.revoked_at_unix,
+    )
+
+
+@router.post(
+    "/orcid/keys",
+    response_model=OrcidKeyRecordResponse,
+    status_code=201,
+)
+async def bind_orcid_key(
+    body: OrcidKeyBindBody,
+    request: Request,
+    authed: AuthedRequest = Depends(require_identity(allow_anonymous=False)),
+) -> OrcidKeyRecordResponse:
+    """Bind an Ed25519 public key to the calling ORCID identity (RRP-0024).
+
+    Gated on a fresh ORCID bearer. Verifies proof-of-possession (signature
+    over the canonical payload with the proposed private key) before
+    persisting. Returns the new ``OrcidKeyRecord`` with a server-minted
+    ``key:<32-hex>`` id.
+    """
+    settings: ServerSettings = request.app.state.settings
+    store: Store = request.app.state.store
+
+    identity = authed.identity
+    if not isinstance(identity, OrcidIdentity):
+        raise forbidden(
+            "only ORCID identities can bind keys; agents use /auth/agent/enroll"
+        )
+
+    # Verify the proof-of-possession signature with the proposed public key.
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+            Ed25519PublicKey,
+        )
+
+        pub = Ed25519PublicKey.from_public_bytes(b64decode(body.public_key_b64))
+        pub.verify(
+            b64decode(body.signature_b64),
+            body.payload_b64.encode("ascii"),
+        )
+    except Exception as e:
+        raise unauthorized(f"proof-of-possession signature invalid: {e}") from e
+
+    # Validate canonical payload contents.
+    import json
+
+    try:
+        payload = json.loads(b64decode(body.payload_b64).decode("utf-8"))
+    except Exception as e:
+        raise validation_error(
+            f"payload not valid base64-encoded JSON: {e}"
+        ) from e
+
+    if payload.get("purpose") != "orcid_key_binding":
+        raise validation_error(
+            "payload.purpose must equal 'orcid_key_binding'"
+        )
+    if payload.get("orcid_id") != identity.orcid_id:
+        raise validation_error(
+            "payload.orcid_id does not match the calling bearer's identity"
+        )
+    if payload.get("public_key_b64") != body.public_key_b64:
+        raise validation_error(
+            "payload.public_key_b64 does not match request public_key_b64"
+        )
+    issued_at = payload.get("issued_at_unix")
+    if not isinstance(issued_at, int):
+        raise validation_error("payload.issued_at_unix missing or not an int")
+    if abs(int(time.time()) - issued_at) > settings.signature_clock_skew_seconds:
+        raise unauthorized("payload issued_at_unix out of window")
+    nonce = payload.get("nonce")
+    if not isinstance(nonce, str) or not nonce:
+        raise validation_error("payload.nonce missing or empty")
+
+    if body.label.startswith("@"):
+        raise validation_error(
+            "label MUST NOT start with `@` (reserved for agent handles)"
+        )
+
+    key_id = "key:" + secrets.token_hex(16)
+    record = OrcidKeyRecord(
+        orcid_id=identity.orcid_id,
+        key_id=key_id,
+        public_key_b64=body.public_key_b64,
+        label=body.label,
+        created_at_unix=int(time.time()),
+        revoked_at_unix=None,
+    )
+    store.add_orcid_key(record)
+    return _orcid_key_record_to_response(record)
+
+
+class OrcidKeyListResponse(BaseModel):
+    keys: list[OrcidKeyRecordResponse]
+
+
+@router.get(
+    "/orcid/keys",
+    response_model=OrcidKeyListResponse,
+)
+async def list_orcid_keys_endpoint(
+    request: Request,
+    authed: AuthedRequest = Depends(require_identity(allow_anonymous=False)),
+    include_revoked: bool = Query(default=False),
+) -> OrcidKeyListResponse:
+    """List the calling ORCID's bound signing keys. Active set only by
+    default; pass ``?include_revoked=true`` to surface tombstoned rows
+    (useful for audit replay)."""
+    identity = authed.identity
+    if not isinstance(identity, OrcidIdentity):
+        raise forbidden("only ORCID identities can list ORCID-bound keys")
+
+    store: Store = request.app.state.store
+    recs = store.list_orcid_keys(
+        identity.orcid_id, include_revoked=include_revoked
+    )
+    return OrcidKeyListResponse(
+        keys=[_orcid_key_record_to_response(r) for r in recs]
+    )
+
+
+@router.delete(
+    "/orcid/keys/{key_id}",
+    status_code=204,
+)
+async def revoke_orcid_key_endpoint(
+    key_id: str,
+    request: Request,
+    authed: AuthedRequest = Depends(require_identity(allow_anonymous=False)),
+) -> None:
+    """Soft-revoke a bound key. The row stays in the store so historical
+    signatures (annotations + submissions made with this key before
+    revocation) remain verifiable; only *current* writes are rejected."""
+    identity = authed.identity
+    if not isinstance(identity, OrcidIdentity):
+        raise forbidden("only ORCID identities can revoke ORCID-bound keys")
+
+    store: Store = request.app.state.store
+    existing = store.get_orcid_key(key_id)
+    if existing is None:
+        raise not_found(f"key {key_id!r} not found")
+    if existing.orcid_id != identity.orcid_id:
+        # Don't leak existence of other users' keys.
+        raise not_found(f"key {key_id!r} not found")
+    store.revoke_orcid_key(key_id, now_unix=int(time.time()))
 
 
 class AgentEnrollBody(BaseModel):

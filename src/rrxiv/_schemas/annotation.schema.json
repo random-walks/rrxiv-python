@@ -69,6 +69,10 @@
           "type": "string",
           "minLength": 1,
           "description": "ORCID iD, agent handle, or anonymous token."
+        },
+        "provenance": {
+          "$ref": "https://rrxiv.com/schema/v0/agent_provenance.schema.json",
+          "description": "Optional per-write provenance metadata (RRP-0025). Recommended when identity_type=agent; ignored for orcid/anonymous identities."
         }
       },
       "additionalProperties": false

@@ -3,15 +3,17 @@
 Synced from: /Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv-python/../rrxiv/schema
 Source repo: /Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv
 Branch:      main
-Commit:      e01d5efe08508bfb698805cdeb0f93f1f1e3a020 (dirty working tree)
-Synced at:   2026-05-25T21:56:10Z
+Commit:      8810235379a52e2a2f23077cb29da06454fc148b
+Synced at:   2026-05-26T15:01:55Z
 
 Files:
+  - agent_provenance.schema.json
   - annotation.schema.json
   - cir.schema.json
   - citation.schema.json
   - claim.schema.json
   - figure.schema.json
+  - orcid_signing_key.schema.json
   - paper.schema.json
   - paper_list_item.schema.json
   - pulse_snapshot.schema.json

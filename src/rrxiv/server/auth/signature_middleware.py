@@ -36,6 +36,7 @@ from rrxiv.client.signatures import (
 )
 from rrxiv.server.store import (
     AgentIdentity,
+    OrcidIdentity,
     Store,
 )
 
@@ -95,7 +96,15 @@ class SignatureVerificationMiddleware:
         scope["state"]["identity"] = identity
         scope["state"]["bearer_token"] = token
 
-        if not isinstance(identity, AgentIdentity):
+        # Anonymous identities are never signed; bearer-only auth.
+        # ORCID identities MAY sign (RRP-0024 bound-key flow) but are
+        # not required to — bearer-only writes still work.
+        # AgentIdentity REQUIRES a signature per RRP-0007.
+        has_signature = "signature" in {h.lower() for h in request.headers.keys()}
+        if not isinstance(identity, AgentIdentity) and not has_signature:
+            # Non-agent identity with no signature → bearer auth.
+            # Body passthrough; the route-level dependency does the
+            # rest of the auth work (rate limiting, anon checks, etc.)
             await self.app(scope, receive, send)
             return
 
@@ -110,20 +119,33 @@ class SignatureVerificationMiddleware:
             content=body,
         )
 
-        def lookup(handle: str) -> Any | None:
-            rec = store.get_agent(handle)
-            if rec is None:
-                return None
+        def lookup(keyid: str) -> Any | None:
+            """Resolve a signature keyid → Ed25519 public key.
+
+            Polymorphic per RRP-0024: ``key:<32-hex>`` → OrcidKeyRecord
+            lookup (rejects revoked keys); any other keyid → agent
+            handle lookup (existing behaviour).
+            """
             from base64 import b64decode
 
             from cryptography.hazmat.primitives.asymmetric.ed25519 import (
                 Ed25519PublicKey,
             )
 
+            pub_b64: str | None = None
+            if keyid.startswith("key:"):
+                rec_orcid = store.get_orcid_key(keyid)
+                if rec_orcid is None or rec_orcid.revoked_at_unix is not None:
+                    return None
+                pub_b64 = rec_orcid.public_key_b64
+            else:
+                rec_agent = store.get_agent(keyid)
+                if rec_agent is not None:
+                    pub_b64 = rec_agent.public_key_b64
+            if pub_b64 is None:
+                return None
             try:
-                return Ed25519PublicKey.from_public_bytes(
-                    b64decode(rec.public_key_b64)
-                )
+                return Ed25519PublicKey.from_public_bytes(b64decode(pub_b64))
             except Exception:
                 return None
 
@@ -140,12 +162,44 @@ class SignatureVerificationMiddleware:
             await response(scope, receive, send)
             return
 
-        if verified.keyid != identity.handle:
+        # Polymorphic identity-vs-keyid check (RRP-0024). Reject any
+        # mismatch where the signing key doesn't belong to the bearer's
+        # identity scope.
+        mismatch_reason: str | None = None
+        if isinstance(identity, AgentIdentity):
+            if verified.keyid.startswith("key:"):
+                mismatch_reason = (
+                    f"agent bearer cannot use ORCID-bound keyid {verified.keyid!r}"
+                )
+            elif verified.keyid != identity.handle:
+                mismatch_reason = (
+                    f"signature keyid {verified.keyid!r} does not match "
+                    f"agent handle {identity.handle!r}"
+                )
+        elif isinstance(identity, OrcidIdentity):
+            if not verified.keyid.startswith("key:"):
+                mismatch_reason = (
+                    f"ORCID bearer cannot use agent keyid {verified.keyid!r}"
+                )
+            else:
+                rec_orcid = store.get_orcid_key(verified.keyid)
+                if rec_orcid is None:
+                    mismatch_reason = f"key {verified.keyid!r} not found"
+                elif rec_orcid.revoked_at_unix is not None:
+                    mismatch_reason = f"key {verified.keyid!r} is revoked"
+                elif rec_orcid.orcid_id != identity.orcid_id:
+                    mismatch_reason = (
+                        f"key {verified.keyid!r} not bound to bearer's ORCID iD"
+                    )
+        else:
+            # Anonymous identity with a signature is nonsensical.
+            mismatch_reason = "anonymous identities cannot sign requests"
+
+        if mismatch_reason is not None:
             response = _problem_response(
                 403,
                 "Forbidden",
-                f"signature keyid {verified.keyid!r} does not match "
-                f"bearer identity {identity.handle!r}",
+                mismatch_reason,
             )
             await response(scope, receive, send)
             return

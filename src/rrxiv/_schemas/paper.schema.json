@@ -105,6 +105,10 @@
           "enum": ["author", "coauthor", "translator", "editor", "encoder", "agent"],
           "default": "author",
           "description": "Authorship role (RRP-0021). `author`/`coauthor` denote original creators; `translator`/`editor`/`encoder`/`agent` denote downstream contributors who transformed the prior work into the rrxiv encoding. Default `author` keeps pre-RRP-0021 papers behaving as before."
+        },
+        "provenance": {
+          "$ref": "https://rrxiv.com/schema/v0/agent_provenance.schema.json",
+          "description": "Optional per-author provenance metadata (RRP-0025). Recommended when is_agent=true; records which model snapshot produced the contribution. Distinct from agent_handle: a stable handle can span multiple model versions over time."
         }
       },
       "if": {

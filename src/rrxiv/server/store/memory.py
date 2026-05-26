@@ -8,6 +8,7 @@ from rrxiv.server.store.protocol import (
     AgentRecord,
     AnonymousChallengeRecord,
     IdempotencyEntry,
+    OrcidKeyRecord,
     PasteCodeEntry,
     StoreState,
     TokenRecord,
@@ -40,6 +41,32 @@ class MemoryStore:
 
     def get_agent(self, handle: str) -> AgentRecord | None:
         return self.state.agents.get(handle)
+
+    # ----- ORCID-bound signing keys (RRP-0024) -----
+    def add_orcid_key(self, record: OrcidKeyRecord) -> None:
+        self.state.orcid_keys[record.key_id] = record
+
+    def get_orcid_key(self, key_id: str) -> OrcidKeyRecord | None:
+        return self.state.orcid_keys.get(key_id)
+
+    def list_orcid_keys(
+        self, orcid_id: str, *, include_revoked: bool = False
+    ) -> list[OrcidKeyRecord]:
+        out = [
+            r for r in self.state.orcid_keys.values() if r.orcid_id == orcid_id
+        ]
+        if not include_revoked:
+            out = [r for r in out if r.revoked_at_unix is None]
+        return out
+
+    def revoke_orcid_key(self, key_id: str, *, now_unix: int) -> None:
+        existing = self.state.orcid_keys.get(key_id)
+        if existing is None or existing.revoked_at_unix is not None:
+            return  # no-op on missing or already-revoked
+        # OrcidKeyRecord is frozen; replace with a new instance.
+        from dataclasses import replace
+
+        self.state.orcid_keys[key_id] = replace(existing, revoked_at_unix=now_unix)
 
     # ----- Anonymous challenges -----
     def add_challenge(self, record: AnonymousChallengeRecord) -> None:
