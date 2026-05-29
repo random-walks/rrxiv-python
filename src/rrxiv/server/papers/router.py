@@ -12,14 +12,16 @@ Paper IDs are accepted in two forms (RRP-0013):
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import ValidationError
 
 from rrxiv.models import CIR
 from rrxiv.server.claims.replication import apply_derived_status
 from rrxiv.server.deps import get_store
-from rrxiv.server.errors import not_found
+from rrxiv.server.errors import not_found, validation_error
 from rrxiv.server.observability import tag
 from rrxiv.server.pagination import paginate
 from rrxiv.server.papers.diff import compute_revision_diff, papers_in_same_lineage
@@ -317,8 +319,19 @@ def get_revision_diff(
 
     prev_cir_raw = store.get_cir(prev["id"]) or dict(prev)
     curr_cir_raw = store.get_cir(curr["id"]) or dict(curr)
-    prev_cir = CIR.model_validate(prev_cir_raw)
-    curr_cir = CIR.model_validate(curr_cir_raw)
+    # A *stored* CIR that no longer satisfies the current model must not
+    # 500 this read endpoint. Older corpus versions diffed against the
+    # evolving schema were the source of the uncaught ValidationError in
+    # Sentry RRXIV-API-2; fail cleanly with the offending fields instead.
+    try:
+        prev_cir = CIR.model_validate(prev_cir_raw)
+        curr_cir = CIR.model_validate(curr_cir_raw)
+    except ValidationError as e:
+        raise validation_error(
+            "a paper in this version lineage has a stored CIR that does not "
+            "validate against the current schema; cannot compute a revision diff",
+            extra={"errors": json.loads(e.json())},
+        ) from e
 
     return compute_revision_diff(prev, prev_cir, curr, curr_cir)
 
