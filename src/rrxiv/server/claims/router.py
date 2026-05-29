@@ -237,8 +237,9 @@ def claim_neighborhood(claim_id: str, request: Request) -> dict[str, Any]:
             "contradicted_by": [],
             "extends": [],
             "extended_by": [],
+            "claims": {},
         }
-    return {
+    result: dict[str, Any] = {
         "origin": claim_id,
         "depends_on": _outgoing(store, claim_id, "depends_on", "depends_on"),
         "dependents": _incoming(store, claim_id, "depends_on", "depends_on"),
@@ -249,3 +250,41 @@ def claim_neighborhood(claim_id: str, request: Request) -> dict[str, Any]:
         "extends": _outgoing(store, claim_id, "extends", "extends"),
         "extended_by": _incoming(store, claim_id, "extends", "extends"),
     }
+    # Embed each neighbour's display fields so the web client renders the
+    # chips + mini-graph without an N+1 fan-out (previously one
+    # GET /claims/{id} per edge). High-degree claims like prop:I.34 have
+    # ~20 neighbours; on a cold API machine those per-neighbour
+    # round-trips blew the web render's timeout → a deterministic 500 on
+    # exactly the most-connected claims. Resolving them here is in-process
+    # dict access (no HTTP, no view-count bump), so it's effectively free
+    # and collapses the client to a single request. The field is additive:
+    # older clients ignore it. (Sprint 27.)
+    edge_keys = (
+        "depends_on",
+        "dependents",
+        "supports",
+        "supported_by",
+        "contradicts",
+        "contradicted_by",
+        "extends",
+        "extended_by",
+    )
+    neighbor_ids: set[str] = set()
+    for key in edge_keys:
+        for edge in result[key]:
+            neighbor_ids.add(edge["source"])
+            neighbor_ids.add(edge["target"])
+    neighbor_ids.discard(claim_id)
+    claims_map: dict[str, dict[str, Any]] = {}
+    for nid in sorted(neighbor_ids):
+        c = store.get_claim(nid)
+        if c is None:
+            continue
+        claims_map[nid] = {
+            "id": nid,
+            "statement": c.get("statement", ""),
+            "claim_type": c.get("claim_type"),
+            "replication_status": c.get("replication_status"),
+        }
+    result["claims"] = claims_map
+    return result
