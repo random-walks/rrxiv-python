@@ -189,7 +189,14 @@ async def submit_paper(
                 },
             )
         prior_cir_raw = store.get_cir(prior["id"]) or dict(prior)
-        prior_cir = CIR.model_validate(prior_cir_raw)
+        try:
+            prior_cir = CIR.model_validate(prior_cir_raw)
+        except ValidationError as e:
+            raise validation_error(
+                "the previous_version's stored CIR does not validate against "
+                "the current schema; cannot compute a revision diff",
+                extra={"errors": json.loads(e.json())},
+            ) from e
         # The current paper's metadata for the diff: use what we'll
         # store, not what the store has (we haven't persisted yet).
         revision_diff_payload = compute_revision_diff(
