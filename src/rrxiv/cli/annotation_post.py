@@ -24,7 +24,7 @@ from typing import Annotated, Any, cast
 import httpx
 import typer
 
-from rrxiv.cli.credentials import load_agent_key, load_bearer
+from rrxiv.cli.credentials import load_agent_key, load_bearer, load_orcid_key
 from rrxiv.client.signatures import AgentSigningAuth, AgentSigningKey
 
 DEFAULT_SERVER = os.environ.get("RRXIV_SERVER", "https://api.rrxiv.com/api/v0")
@@ -50,8 +50,19 @@ def _resolve_identity(
         bearer = load_bearer(server, kind)  # type: ignore[arg-type]
         if not bearer:
             continue
+        if kind == "orcid":
+            # RRP-0024: sign with the machine's bound ORCID key if present.
+            orcid_signing: AgentSigningKey | None = None
+            if bearer.identity is not None:
+                orcid_key = load_orcid_key(server, bearer.identity)
+                if orcid_key is not None:
+                    orcid_signing = AgentSigningKey.from_private_bytes(
+                        handle=orcid_key.key_id,
+                        private_key_bytes=orcid_key.private_key_bytes(),
+                    )
+            return kind, bearer.token, orcid_signing
         if kind != "agent":
-            return kind, bearer.token, None
+            return kind, bearer.token, None  # anonymous: bearer only
         if bearer.identity is None:
             continue
         agent_record = load_agent_key(server, bearer.identity)

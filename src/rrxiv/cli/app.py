@@ -70,6 +70,11 @@ from rrxiv.cli.login import login_app  # noqa: E402
 
 app.add_typer(login_app, name="login")
 
+# ORCID signing-key management (RRP-0024).
+from rrxiv.cli.auth import auth_app  # noqa: E402
+
+app.add_typer(auth_app, name="auth")
+
 
 # Logout (alias for `login logout`).
 @app.command()

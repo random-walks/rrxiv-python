@@ -74,6 +74,26 @@ class StoredAgentKey:
         return b64decode(self.private_key_b64)
 
 
+@dataclass(frozen=True, slots=True)
+class StoredOrcidKey:
+    """A persisted ORCID-bound signing key (RRP-0024).
+
+    One entry per ``(api_base, orcid_id)`` — the key *this machine* bound.
+    The server may hold several keys for the same ORCID (one per machine);
+    we only ever hold the private half of our own. ``key_id`` is the
+    server-minted ``key:<hex>`` used as the RFC-9421 ``keyid`` on writes.
+    """
+
+    api_base: str
+    orcid_id: str
+    key_id: str
+    private_key_b64: str
+    label: str = ""
+
+    def private_key_bytes(self) -> bytes:
+        return b64decode(self.private_key_b64)
+
+
 # ----------------------------- backend selection -----------------------------
 
 
@@ -105,6 +125,10 @@ def _bearer_username(api_base: str, identity_type: str) -> str:
 
 def _agent_key_username(api_base: str, handle: str) -> str:
     return f"{api_base}:agent:{handle}:private-key"
+
+
+def _orcid_key_username(api_base: str, orcid_id: str) -> str:
+    return f"{api_base}:orcid:{orcid_id}:signing-key"
 
 
 def store_bearer(record: StoredBearer) -> None:
@@ -191,6 +215,49 @@ def delete_agent_key(api_base: str, handle: str) -> None:
             pass
     else:
         _file_update(lambda d: _file_delete_agent_key(d, api_base, handle))
+
+
+# ----------------------------- orcid signing keys (RRP-0024) -----------------------------
+
+
+def store_orcid_key(record: StoredOrcidKey) -> None:
+    if _backend() == "keyring":
+        import keyring
+
+        keyring.set_password(
+            KEYRING_SERVICE,
+            _orcid_key_username(record.api_base, record.orcid_id),
+            json.dumps(_orcid_key_to_dict(record)),
+        )
+    else:
+        _file_update(lambda d: _file_set_orcid_key(d, record))
+
+
+def load_orcid_key(api_base: str, orcid_id: str) -> StoredOrcidKey | None:
+    if _backend() == "keyring":
+        import keyring
+
+        raw = keyring.get_password(
+            KEYRING_SERVICE, _orcid_key_username(api_base, orcid_id)
+        )
+        if raw is None:
+            return None
+        return _orcid_key_from_dict(json.loads(raw))
+    return _file_load_orcid_key(api_base, orcid_id)
+
+
+def delete_orcid_key(api_base: str, orcid_id: str) -> None:
+    if _backend() == "keyring":
+        import keyring
+
+        try:
+            keyring.delete_password(
+                KEYRING_SERVICE, _orcid_key_username(api_base, orcid_id)
+            )
+        except keyring.errors.PasswordDeleteError:
+            pass
+    else:
+        _file_update(lambda d: _file_delete_orcid_key(d, api_base, orcid_id))
 
 
 # ----------------------------- introspection -----------------------------
@@ -321,6 +388,37 @@ def _file_delete_agent_key(
         d.get("credentials", {}).pop(api_base, None)
 
 
+def _file_set_orcid_key(d: dict[str, Any], record: StoredOrcidKey) -> None:
+    server = d.setdefault("credentials", {}).setdefault(record.api_base, {})
+    keys = server.setdefault("orcid_keys", {})
+    keys[record.orcid_id] = _orcid_key_to_dict(record)
+
+
+def _file_load_orcid_key(api_base: str, orcid_id: str) -> StoredOrcidKey | None:
+    d = _file_load()
+    raw = (
+        d.get("credentials", {})
+        .get(api_base, {})
+        .get("orcid_keys", {})
+        .get(orcid_id)
+    )
+    if raw is None:
+        return None
+    return _orcid_key_from_dict(raw)
+
+
+def _file_delete_orcid_key(
+    d: dict[str, Any], api_base: str, orcid_id: str
+) -> None:
+    server = d.get("credentials", {}).get(api_base, {})
+    keys = server.get("orcid_keys", {})
+    keys.pop(orcid_id, None)
+    if not keys:
+        server.pop("orcid_keys", None)
+    if not server:
+        d.get("credentials", {}).pop(api_base, None)
+
+
 # ----------------------------- (de)ser helpers -----------------------------
 
 
@@ -364,15 +462,39 @@ def _agent_key_from_dict(d: dict[str, Any]) -> StoredAgentKey:
     )
 
 
+def _orcid_key_to_dict(record: StoredOrcidKey) -> dict[str, Any]:
+    return {
+        "api_base": record.api_base,
+        "orcid_id": record.orcid_id,
+        "key_id": record.key_id,
+        "private_key_b64": record.private_key_b64,
+        "label": record.label,
+    }
+
+
+def _orcid_key_from_dict(d: dict[str, Any]) -> StoredOrcidKey:
+    return StoredOrcidKey(
+        api_base=d["api_base"],
+        orcid_id=d["orcid_id"],
+        key_id=d["key_id"],
+        private_key_b64=d["private_key_b64"],
+        label=d.get("label", ""),
+    )
+
+
 __all__ = [
     "StoredAgentKey",
     "StoredBearer",
+    "StoredOrcidKey",
     "delete_agent_key",
     "delete_bearer",
+    "delete_orcid_key",
     "load_agent_key",
     "load_bearer",
+    "load_orcid_key",
     "store_agent_key",
     "store_bearer",
+    "store_orcid_key",
     "stored_identities_for_server",
     "stored_servers",
 ]
