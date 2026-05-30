@@ -214,6 +214,17 @@ def _tarball_with(files: dict[str, str]) -> bytes:
     return buf.getvalue()
 
 
+def _tarball_with_bytes(files: dict[str, bytes]) -> bytes:
+    """Helper: build a tar.gz bundle from a dict of filename → raw bytes."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    return buf.getvalue()
+
+
 def test_paper_source_manifest_lists_files() -> None:
     _, sync, _ = _client_with_orcid_bearer()
     cir = _fixture_paper("p-manifest")
@@ -263,6 +274,35 @@ def test_paper_source_file_returns_utf8_text() -> None:
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/plain")
     assert resp.text == main_tex
+
+
+def test_paper_source_file_resolves_under_bundle_root_and_serves_image() -> None:
+    """Claim figures point at ``figures/fig.png`` (relative to the source
+    root), but bundles ship a single top-level directory (``paper/...``).
+    The endpoint resolves the path under that root and serves it as image/png
+    so the client's <img> renders — previously this 404'd (broken figures)."""
+    _, sync, _ = _client_with_orcid_bearer()
+    cir = _fixture_paper("p-fig")
+    png = b"\x89PNG\r\n\x1a\n\x00fake-png-bytes"
+    bundle = _tarball_with_bytes(
+        {
+            "paper/main.tex": b"\\section{H}\nworld\n",
+            "paper/figures/fig.png": png,
+        }
+    )
+    sync.post(
+        "/submissions",
+        files={
+            "cir": ("c.json", json.dumps(cir).encode("utf-8"), "application/json"),
+            "bundle": ("p.tar.gz", bundle, "application/gzip"),
+        },
+    )
+    # request the figure by its source-root-relative path (no `paper/` prefix)
+    resp = sync.get("/papers/p-fig/source/file?path=figures/fig.png")
+    sync.close()
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"].startswith("image/png")
+    assert resp.content == png
 
 
 def test_paper_source_file_rejects_path_traversal() -> None:
