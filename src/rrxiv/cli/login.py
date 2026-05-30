@@ -30,6 +30,7 @@ from rrxiv.cli.credentials import (
     StoredBearer,
     delete_agent_key,
     delete_bearer,
+    delete_orcid_key,
     load_bearer,
     store_agent_key,
     store_bearer,
@@ -38,7 +39,9 @@ from rrxiv.cli.credentials import (
 )
 
 DEFAULT_SERVER_ENV = "RRXIV_API_BASE"
-DEFAULT_SERVER = "https://rrxiv.com/api/v0"
+# The API is served from the api. subdomain; the apex (rrxiv.com) is the web
+# client and 404s /api/v0. Matches cli/read_commands.py's default.
+DEFAULT_SERVER = "https://api.rrxiv.com/api/v0"
 
 
 login_app = typer.Typer(
@@ -476,18 +479,37 @@ def logout(
 
 def _logout_server(api_base: str, *, identity_type: str | None) -> None:
     if identity_type is None:
-        # Wipe all identity types.
+        # Wipe all identity types. Capture the orcid_id before deleting the
+        # bearer so we can also drop the bound signing key (RRP-0024).
+        orcid_bearer = load_bearer(api_base, "orcid")
         for it in ("orcid", "agent", "anonymous"):
             delete_bearer(api_base, it)
         info = stored_identities_for_server(api_base)
         for handle in list(info.get("agent_keys", {})):
             delete_agent_key(api_base, handle)
+        _forget_orcid_keys(api_base, orcid_bearer, info)
+        return
+    if identity_type == "orcid":
+        orcid_bearer = load_bearer(api_base, "orcid")
+        delete_bearer(api_base, "orcid")
+        _forget_orcid_keys(api_base, orcid_bearer, stored_identities_for_server(api_base))
         return
     delete_bearer(api_base, identity_type)  # type: ignore[arg-type]
     if identity_type == "agent":
         info = stored_identities_for_server(api_base)
         for handle in list(info.get("agent_keys", {})):
             delete_agent_key(api_base, handle)
+
+
+def _forget_orcid_keys(
+    api_base: str, orcid_bearer: StoredBearer | None, info: dict[str, Any]
+) -> None:
+    """Drop bound ORCID signing keys (RRP-0024). Uses the bearer's orcid_id
+    (works under the keyring backend) plus any ids in the file-backend index."""
+    if orcid_bearer is not None and orcid_bearer.identity is not None:
+        delete_orcid_key(api_base, orcid_bearer.identity)
+    for orcid_id in list(info.get("orcid_keys", {})):
+        delete_orcid_key(api_base, orcid_id)
 
 
 # ----------------------------- shared persistence helper -----------------------------

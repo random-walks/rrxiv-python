@@ -33,9 +33,15 @@ from rrxiv.auth.anonymous import (
 )
 from rrxiv.auth.orcid import (
     OrcidAuthorizationUrl,
+    OrcidKeyBindRequest,
+    OrcidKeyRecord,
     OrcidTokenResponse,
+    bind_orcid_key,
+    build_key_binding_payload,
     build_orcid_authorization_url,
     exchange_orcid_code,
+    list_orcid_keys,
+    revoke_orcid_key,
 )
 from rrxiv.auth.refresh import RefreshedBearer, refresh_bearer
 
@@ -45,13 +51,19 @@ __all__ = [
     "AnonymousChallenge",
     "AnonymousChallengeResponse",
     "OrcidAuthorizationUrl",
+    "OrcidKeyBindRequest",
+    "OrcidKeyRecord",
     "OrcidTokenResponse",
     "RefreshedBearer",
+    "bind_orcid_key",
+    "build_key_binding_payload",
     "build_orcid_authorization_url",
     "enroll_agent",
     "exchange_orcid_code",
+    "list_orcid_keys",
     "refresh_bearer",
     "request_anonymous_challenge",
+    "revoke_orcid_key",
     "sign_enrollment_payload",
     "verify_anonymous_challenge",
 ]
