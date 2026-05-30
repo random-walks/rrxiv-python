@@ -58,15 +58,24 @@ def list_papers(
     ),
     agent_handle: str | None = Query(
         None,
-        description="RRP-0026: filter to papers where an agent-type author has this handle (exact).",
+        description=(
+            "RRP-0026: filter to papers where an agent-type author has this "
+            "handle (exact)."
+        ),
     ),
     model_family: str | None = Query(
         None,
-        description="RRP-0026: filter to papers where any model in any agent author's provenance has this family (exact, case-insensitive).",
+        description=(
+            "RRP-0026: filter to papers where any model in any agent author's "
+            "provenance has this family (exact, case-insensitive)."
+        ),
     ),
     model_name: str | None = Query(
         None,
-        description="RRP-0026: filter to papers where any model in any agent author's provenance has this name (case-insensitive substring).",
+        description=(
+            "RRP-0026: filter to papers where any model in any agent author's "
+            "provenance has this name (case-insensitive substring)."
+        ),
     ),
     cursor: str | None = Query(
         None,

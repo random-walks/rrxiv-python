@@ -76,6 +76,9 @@ select = ["E", "F", "I", "N", "UP", "B", "RUF"]
 # flags both as "ambiguous" but they're the subject of the test.
 "src/rrxiv/parser/clean.py" = ["RUF001"]
 "tests/test_clean.py" = ["RUF001"]
+# Tests unpack (app, transport) from the _client() helper and often use
+# only the transport; the unused `app` binding is intentional, not dead.
+"tests/**/*.py" = ["RUF059"]
 
 [tool.mypy]
 strict = true
