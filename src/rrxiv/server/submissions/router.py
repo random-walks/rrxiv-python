@@ -464,6 +464,27 @@ def get_paper_source_manifest(paper_id: str, request: Request) -> dict[str, Any]
     return {"paper_id": canonical_id, "files": files}
 
 
+def _resolve_archive_member(tar: Any, path: str) -> Any:
+    """Find ``path`` in the source archive, tolerant of the bundle root.
+
+    Submission bundles ship a single top-level directory (spec/0005 §Source
+    bundle format), so paths recorded relative to the source root — e.g. a
+    claim figure's ``figures/fig-i-1.png`` — don't match the archived member
+    name ``paper/figures/fig-i-1.png``. Try the exact name first, then resolve
+    against each top-level directory in the archive. Returns None if not found.
+    """
+    try:
+        return tar.getmember(path)
+    except KeyError:
+        pass
+    for top in sorted({n.split("/", 1)[0] for n in tar.getnames() if "/" in n}):
+        try:
+            return tar.getmember(f"{top}/{path}")
+        except KeyError:
+            continue
+    return None
+
+
 @sources_router.get("/{paper_id}/source/file")
 def get_paper_source_file(
     paper_id: str, path: str, request: Request
@@ -476,6 +497,7 @@ def get_paper_source_file(
     client uses the manifest to decide what to render).
     """
     import io
+    import mimetypes
     import tarfile
 
     store: Store = get_store(request)
@@ -494,12 +516,9 @@ def get_paper_source_file(
 
     try:
         with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:
-            try:
-                member = tar.getmember(path)
-            except KeyError as e:
-                raise not_found(
-                    f"path {path!r} is not in the archive"
-                ) from e
+            member = _resolve_archive_member(tar, path)
+            if member is None:
+                raise not_found(f"path {path!r} is not in the archive")
             if not member.isfile():
                 raise not_found(f"path {path!r} is not a regular file")
             handle = tar.extractfile(member)
@@ -510,6 +529,12 @@ def get_paper_source_file(
         raise not_found(
             f"paper {paper_id} source archive is unreadable: {e}"
         ) from e
+
+    # Images + PDFs get their real content-type so the client can render them
+    # directly — claim figures point at the rendered .png next to the .tex.
+    guessed, _ = mimetypes.guess_type(path)
+    if guessed and (guessed.startswith("image/") or guessed == "application/pdf"):
+        return Response(content=content, media_type=guessed)
 
     kind = _classify_source_file(path)
     if kind in {"tex", "cls", "sty", "bib", "other"} and len(content) < 5_000_000:
