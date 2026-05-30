@@ -3,7 +3,7 @@
   "$id": "https://rrxiv.com/schema/v0/cir.schema.json",
   "title": "Canonical Intermediate Representation (CIR)",
   "description": "The full structured representation of a rrxiv paper. A Paper's metadata plus its derived structure (sections, claims, citations, figures, annotations). Extracted from TeX/Typst source by the rrxiv parser. The unit of agent-readable knowledge in the rrxiv corpus.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "object",
   "required": ["rrxiv_version", "id", "version", "title", "authors", "abstract", "submitted_at", "license", "source"],
   "properties": {
@@ -17,6 +17,12 @@
       "type": "string",
       "description": "Stable, canonical machine identifier for this paper. Server-assigned UUIDv7 (RFC 9562) — opaque to clients; do NOT parse, derive, or construct it. Once assigned, NEVER changes. Humans cite the `id_slug`, not this. See RRP-0029.",
       "examples": ["01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f"]
+    },
+    "id_slug": {
+      "type": "string",
+      "description": "Human-friendly paper identifier of the form rrxiv:YYMM.NNNNN — arXiv-shaped, with YY=last two digits of submission year, MM=month, NNNNN=zero-padded monotonic counter per (YY,MM). Server-minted at submission, unique per server instance. Used in URLs, citations, and human-readable references. The canonical machine identifier remains `id`. Once assigned, NEVER changes. Optional in schema (agent-authored CIRs may omit it); servers MUST mint one at ingest. See RRP-0013.",
+      "pattern": "^rrxiv:[0-9]{4}\\.[0-9]{5}$",
+      "examples": ["rrxiv:2402.00128", "rrxiv:2605.00001"]
     },
     "version": {
       "type": "string",

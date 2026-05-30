@@ -878,6 +878,25 @@ def _parse_meta_json_authors(meta_path: Path | None) -> list[dict[str, Any]]:
     return out
 
 
+def _parse_meta_json_id_slug(meta_path: Path | None) -> str | None:
+    """Read ``rrxiv-meta.json``'s ``id_slug`` (the citable ``rrxiv:YYMM.NNNNN``
+    identifier, RRP-0013), or None if missing / malformed.
+
+    Lets a build emit the slug natively so the server never has to mint (and,
+    historically, scramble) one at ingest. The opaque machine ``id`` is still
+    server-assigned at submission (RRP-0029)."""
+    if meta_path is None or not meta_path.is_file():
+        return None
+    try:
+        import json
+
+        data = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    slug = data.get("id_slug")
+    return slug if isinstance(slug, str) and slug else None
+
+
 def _coerce_author_record(raw: dict[str, Any]) -> dict[str, Any]:
     """Normalise a meta-json author dict into the CIR Author shape.
 
@@ -1147,6 +1166,10 @@ def build_cir(
             seen_keys.add(ie.key)
 
     paper_id = meta.get("id") or tex.metadata.rrxiv_id or tex_path.stem
+    # id_slug (RRP-0013): the citable rrxiv:YYMM.NNNNN identifier. Prefer a
+    # sidecar value, else read rrxiv-meta.json so the build emits the slug
+    # natively — the opaque machine id is server-assigned at submit (RRP-0029).
+    id_slug = meta.get("id_slug") or _parse_meta_json_id_slug(meta_path)
 
     cir_dict: dict[str, Any] = {
         "rrxiv_version": meta.get("protocol")
@@ -1166,6 +1189,9 @@ def build_cir(
             "uri": tex_path.absolute().as_uri(),
         },
     }
+
+    if id_slug:
+        cir_dict["id_slug"] = id_slug
 
     topics_str = meta.get("topics") or ""
     if topics_str:
