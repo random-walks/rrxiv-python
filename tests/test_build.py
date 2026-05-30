@@ -133,6 +133,41 @@ def test_no_title_in_source_uses_placeholder(tmp_path: Path) -> None:
     assert cir.id == "test-id"
 
 
+def test_id_slug_read_from_meta_json(tmp_path: Path) -> None:
+    """build_cir emits the citable id_slug natively from rrxiv-meta.json
+    (RRP-0013/0029); the opaque machine id stays separate."""
+    tex = tmp_path / "p.tex"
+    sidecar = tmp_path / "p.rrxiv.aux"
+    meta = tmp_path / "rrxiv-meta.json"  # sibling-fallback auto-detect
+    tex.write_text(
+        "\\documentclass{rrxiv}\n\\title{T}\n\\author{A. Tester}\n"
+        "\\begin{document}\n\\begin{abstract}A.\\end{abstract}\n\\end{document}\n"
+    )
+    sidecar.write_text(
+        "RRXIV:meta:id:test-id\nRRXIV:meta:version:v1\n"
+        "RRXIV:meta:protocol:0.1.0\nRRXIV:meta:license:CC-BY-4.0\n"
+    )
+    meta.write_text(
+        json.dumps({"id_slug": "rrxiv:2605.00042", "authors": [{"name": "A. Tester"}]})
+    )
+    cir = build_cir(tex)
+    assert cir.id_slug == "rrxiv:2605.00042"
+    assert cir.id == "test-id"  # machine id stays separate from the slug
+
+
+def test_id_slug_absent_when_meta_lacks_it(tmp_path: Path) -> None:
+    """No id_slug in meta → CIR omits it; the server mints one at ingest."""
+    tex = tmp_path / "p.tex"
+    sidecar = tmp_path / "p.rrxiv.aux"
+    tex.write_text(
+        "\\documentclass{rrxiv}\n\\title{T}\n\\author{A. Tester}\n"
+        "\\begin{document}\n\\begin{abstract}A.\\end{abstract}\n\\end{document}\n"
+    )
+    sidecar.write_text("RRXIV:meta:id:test-id\nRRXIV:meta:version:v1\n")
+    cir = build_cir(tex)
+    assert cir.id_slug is None
+
+
 def test_validation_error_propagates() -> None:
     """If the constructed CIR is somehow malformed, ValidationError surfaces."""
     # Force an invalid CIR by passing a truly malformed dict via the model.
