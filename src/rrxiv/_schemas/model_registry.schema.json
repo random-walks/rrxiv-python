@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rrxiv.com/schema/v0/model_registry.schema.json",
+  "title": "ModelRegistry",
+  "description": "Maintainer-curated registry of AI models recognised by an rrxiv instance (RRP-0027). Used to populate model-picker UIs and to provide the canonical spelling of an agent's `Author.name`. The registry is descriptive of real usage, not prescriptive — papers MAY declare models not in the registry; the registry exists to make the common case fast and the common spelling stable.",
+  "version": "0.1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "entries"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Registry schema version (semver). Bumps when the entry shape changes."
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date",
+      "description": "Last update date for the registry file itself (not for individual entries)."
+    },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/RegistryEntry" },
+      "description": "One entry per recognised model snapshot. Multiple snapshots of the same marketing name get separate entries with the same `name` but different `release_pin`."
+    }
+  },
+  "$defs": {
+    "RegistryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "release_pin", "vendor", "family"],
+      "description": "One model snapshot. Mirrors the RRP-0026 ModelDescriptor shape (same field names) plus registry-only fields (`is_current`, `display_order`, `aliases`).",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Full canonical marketing name. The string an author SHOULD use in `Author.name` when this model is the agent (RRP-0026)."
+        },
+        "release_pin": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.-]{0,127}$",
+          "description": "Exact API model identifier as exposed by the vendor (e.g. `claude-opus-4-7-20260520`). The registry key — unique across all entries."
+        },
+        "vendor": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,31}$",
+          "description": "Vendor shortname (anthropic, openai, google, meta, ...)."
+        },
+        "family": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,31}$",
+          "description": "Family within vendor (claude, gpt, gemini, llama, ...)."
+        },
+        "series": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,31}$",
+          "description": "Series within family (opus, sonnet, gpt-5, gemini-pro, ...)."
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Marketing version (`4.7`, `5.0`)."
+        },
+        "release_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Snapshot release date, YYYY-MM-DD."
+        },
+        "context_window_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Effective context window for this snapshot."
+        },
+        "is_current": {
+          "type": "boolean",
+          "description": "True if the vendor still actively serves this snapshot. UIs grey out `false` entries by default."
+        },
+        "display_order": {
+          "type": "integer",
+          "description": "Sort order for picker UIs. Lower comes first. Within a family, newer/more-capable models get lower numbers."
+        },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "description": "Alternative spellings consumers MAY recognise as equivalent to `name`."
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "version": "0.1.0",
+      "updated_at": "2026-05-26",
+      "entries": [
+        {
+          "name": "Claude Opus 4.7",
+          "release_pin": "claude-opus-4-7-20260520",
+          "vendor": "anthropic",
+          "family": "claude",
+          "series": "opus",
+          "version": "4.7",
+          "release_date": "2026-05-20",
+          "context_window_tokens": 200000,
+          "is_current": true,
+          "display_order": 10,
+          "aliases": ["Claude 4.7 Opus", "claude-opus-4.7"]
+        }
+      ]
+    }
+  ]
+}

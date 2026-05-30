@@ -38,6 +38,10 @@ from rrxiv.models._generated.claim_schema import (
     Reproducibility as ClaimReproducibility,
 )
 from rrxiv.models._generated.figure_schema import Figure
+from rrxiv.models._generated.model_registry_schema import (
+    ModelRegistry,
+    RegistryEntry,
+)
 from rrxiv.models._generated.paper_list_item_schema import (
     PaperListItem,
     Stats,
@@ -100,10 +104,12 @@ __all__ = [
     "Figure",
     "Format",
     "IdentityType",
+    "ModelRegistry",
     "ModifiedClaim",
     "Paper",
     "PaperListItem",
     "PaperStatus",
+    "RegistryEntry",
     "RemovedClaim",
     "ReplicationStatus",
     "ReproducibilityData",
