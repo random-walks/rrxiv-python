@@ -47,6 +47,8 @@ dev = [
     "python-multipart>=0.0.9",
     "keyring>=25",
     "sentry-sdk[fastapi]>=2.0",
+    # scripts/dump_openapi.py serialises the generated OpenAPI to YAML.
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]
