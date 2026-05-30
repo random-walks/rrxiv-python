@@ -15,13 +15,21 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from rrxiv.server.claims.replication import derive_replication_status
+from rrxiv.server.papers.slug import claim_owner_key
 
 if TYPE_CHECKING:
     from rrxiv.server.store import Store
 
 
-def compute_stats(paper_id: str, store: Store) -> dict[str, Any]:
+def compute_stats(owner_key: str, store: Store) -> dict[str, Any]:
     """Compute aggregate stats for a paper from claims + annotations.
+
+    ``owner_key`` is the value claims + paper-level annotations are
+    keyed off — the paper's citable ``id_slug`` (RRP-0013 / RRP-0029),
+    NOT its opaque machine ``id`` (a UUIDv7). Callers should pass
+    ``claim_owner_key(paper)``. (Claim ids are ``<id_slug>:<label>`` and
+    ``claim.paper_id`` is the ``id_slug``; for the legacy corpus where
+    ``id == id_slug`` these coincide.)
 
     Returns a dict matching ``paper_list_item.schema.json#/$defs/Stats``::
 
@@ -58,7 +66,7 @@ def compute_stats(paper_id: str, store: Store) -> dict[str, Any]:
     rollup rules.
     """
     # Claim aggregates ---------------------------------------------------
-    claims = [c for c in store.list_claims() if c.get("paper_id") == paper_id]
+    claims = [c for c in store.list_claims() if c.get("paper_id") == owner_key]
     replicated = 0
     partial = 0
     contradicted = 0
@@ -86,7 +94,7 @@ def compute_stats(paper_id: str, store: Store) -> dict[str, Any]:
 
     # Annotations ---------------------------------------------------------
     paper_annotations = [
-        a for a in store.list_annotations() if a.get("target_id") == paper_id
+        a for a in store.list_annotations() if a.get("target_id") == owner_key
     ]
     is_retracted = any(
         a.get("annotation_type") == "erratum"
@@ -95,7 +103,7 @@ def compute_stats(paper_id: str, store: Store) -> dict[str, Any]:
         for a in paper_annotations
     )
     has_any_annotation = bool(paper_annotations) or any(
-        a.get("target_id", "").startswith(f"{paper_id}:")
+        a.get("target_id", "").startswith(f"{owner_key}:")
         for a in store.list_annotations()
     )
 
@@ -156,7 +164,7 @@ def compute_stats(paper_id: str, store: Store) -> dict[str, Any]:
 
 def to_list_item(paper: dict[str, Any], store: Store) -> dict[str, Any]:
     """Combine a Paper with its computed Stats into a PaperListItem."""
-    stats = compute_stats(paper["id"], store)
+    stats = compute_stats(claim_owner_key(paper), store)
     item = dict(paper)
     item["stats"] = stats
     return item

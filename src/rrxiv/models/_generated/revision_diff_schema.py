@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
@@ -14,7 +13,10 @@ class VersionRef(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    paper_id: UUID
+    paper_id: str
+    """
+    The version's machine `id` (server-assigned UUIDv7).
+    """
     version: str = Field(..., pattern="^v[0-9]+$")
     id_slug: str | None = None
 

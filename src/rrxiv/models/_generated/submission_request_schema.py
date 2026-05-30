@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from uuid import UUID
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -25,9 +23,9 @@ class SubmissionRequest(BaseModel):
     """
     Source bundle as a `.tar.gz` file part named `bundle`. Constraints in spec/0005-submission.md §Source bundle format: no symlinks, no executables, ≤100 MB uncompressed, UTF-8, single top-level directory.
     """
-    previous_version: UUID | None = None
+    previous_version: str | None = None
     """
-    Paper ID of the prior version when submitting a revision. Server sets `previous_version` on the stored paper to this value; null/absent means this is v1. Server validates that the referenced paper exists and belongs to the same author lineage (or that the submitting identity is on the prior version's author list).
+    The prior version's `id` (server-assigned UUIDv7) when submitting a revision; an `id_slug` is also accepted and resolved (RRP-0013). Server stores the resolved `id` as `previous_version`; null/absent means this is v1. Server validates that the referenced paper exists and belongs to the same author lineage (or that the submitting identity is on the prior version's author list).
     """
     revision_summary: str | None = Field(None, max_length=8192)
     """

@@ -147,13 +147,16 @@ class Claim(BaseModel):
     A single falsifiable assertion extracted from a paper. The unit of structured knowledge in the rrxiv corpus. Claim graph edges (depends_on, supports, contradicts, extends) connect claims across papers.
     """
 
-    id: str = Field(..., examples=["01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f:queryability"])
+    id: str = Field(
+        ...,
+        examples=["rrxiv:2605.00001:claim:queryability", "rrxiv:2605.00009:prop:I.1"],
+    )
     """
-    Stable, globally unique claim ID. Once assigned, NEVER changes. Suggested format: <paper_id>:<local_label>.
+    Stable, citable claim ID of the form `<id_slug>:<local_label>` (e.g. `rrxiv:2605.00001:claim:queryability`). Built client-side at authoring time, so it keys off the paper's citable `id_slug` — NOT the opaque machine `id`, which the server mints only at submission. Once assigned, NEVER changes. See RRP-0029.
     """
     paper_id: str | None = None
     """
-    ID of the paper this claim originates in. Same paper may contain many claims.
+    The originating paper's citable `id_slug` (e.g. `rrxiv:2605.00001`) — the same value that prefixes this claim's `id`. Slug-based, because claim ids are authored client-side before the server mints the paper's machine `id`. See RRP-0029.
     """
     statement: str = Field(..., min_length=1)
     """

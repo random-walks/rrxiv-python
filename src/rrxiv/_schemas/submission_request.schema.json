@@ -3,7 +3,7 @@
   "$id": "https://rrxiv.com/schema/v0/submission_request.schema.json",
   "title": "SubmissionRequest",
   "description": "Wire format for POST /api/v0/submissions. Multipart-encoded: the `cir` and `bundle` fields are multipart file parts; the remaining fields are form fields. See spec/0005-submission.md for prose; RRP-0016 for the rationale.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "object",
   "required": ["cir", "bundle"],
   "properties": {
@@ -19,8 +19,7 @@
     },
     "previous_version": {
       "type": ["string", "null"],
-      "format": "uuid",
-      "description": "Paper ID of the prior version when submitting a revision. Server sets `previous_version` on the stored paper to this value; null/absent means this is v1. Server validates that the referenced paper exists and belongs to the same author lineage (or that the submitting identity is on the prior version's author list)."
+      "description": "The prior version's `id` (server-assigned UUIDv7) when submitting a revision; an `id_slug` is also accepted and resolved (RRP-0013). Server stores the resolved `id` as `previous_version`; null/absent means this is v1. Server validates that the referenced paper exists and belongs to the same author lineage (or that the submitting identity is on the prior version's author list)."
     },
     "revision_summary": {
       "type": ["string", "null"],

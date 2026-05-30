@@ -57,12 +57,20 @@ def _client() -> tuple[Any, httpx.Client]:
 
 def _seed_paper_with_claim(app: Any, paper_id: str = "p-rt") -> str:
     """Stash a paper + one claim directly in the store. Bypasses the
-    submission flow so the test stays focused on annotations."""
+    submission flow so the test stays focused on annotations.
+
+    Claims are slug-keyed (``claim.paper_id == paper.id_slug``, claim
+    ``id`` is ``<id_slug>:<local_label>``) per RRP-0013 / RRP-0029. This
+    fixture uses the degenerate ``id == id_slug`` form (so the existing
+    ``{paper_id}:c1`` claim-id + ``target_id=<paper_id>`` assertions
+    stay valid) — the read filters key off the slug, which here equals
+    the id.
+    """
     app.state.store.add_paper(
         {
             "rrxiv_version": "0.1.0",
             "id": paper_id,
-            "id_slug": f"rrxiv:2026.{paper_id[-5:]}",
+            "id_slug": paper_id,
             "version": "v1",
             "title": "Round-trip fixture",
             "authors": [{"name": "A. Tester"}],

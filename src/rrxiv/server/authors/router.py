@@ -33,6 +33,7 @@ from rrxiv.server.claims.replication import apply_derived_status
 from rrxiv.server.deps import get_store
 from rrxiv.server.pagination import paginate
 from rrxiv.server.papers.projection import to_list_item
+from rrxiv.server.papers.slug import claim_owner_key
 from rrxiv.server.store import Store
 
 router = APIRouter(prefix="/authors", tags=["Authors"])
@@ -246,17 +247,19 @@ def get_author(ident: str, request: Request) -> dict[str, Any]:
         }
 
     paper_ids = set(record["paper_ids"])
-    papers = [
-        to_list_item(p, store)
-        for p in store.list_papers()
-        if p["id"] in paper_ids
-    ]
+    authored_papers = [p for p in store.list_papers() if p["id"] in paper_ids]
+    papers = [to_list_item(p, store) for p in authored_papers]
     papers.sort(key=lambda p: p.get("submitted_at") or "", reverse=True)
 
+    # Claims are slug-keyed (claim.paper_id == id_slug per RRP-0013 /
+    # RRP-0029), but record["paper_ids"] holds machine ``id``s (UUIDv7).
+    # Map this identity's papers to their slug owner-keys and filter on
+    # those.
+    owner_keys = {claim_owner_key(p) for p in authored_papers}
     claims = [
         apply_derived_status(c, store)
         for c in store.list_claims()
-        if c.get("paper_id") in paper_ids
+        if c.get("paper_id") in owner_keys
     ]
 
     co_authors = sorted(
@@ -331,11 +334,17 @@ def list_author_claims(
     if record is None:
         return {"items": [], "next_cursor": None}
 
+    # Claims are slug-keyed (claim.paper_id == id_slug per RRP-0013 /
+    # RRP-0029); record["paper_ids"] holds machine ``id``s (UUIDv7), so
+    # map this identity's papers to their slug owner-keys first.
     paper_ids = set(record["paper_ids"])
+    owner_keys = {
+        claim_owner_key(p) for p in store.list_papers() if p["id"] in paper_ids
+    }
     claims = [
         apply_derived_status(c, store)
         for c in store.list_claims()
-        if c.get("paper_id") in paper_ids
+        if c.get("paper_id") in owner_keys
     ]
     page, next_cursor = paginate(
         claims,
