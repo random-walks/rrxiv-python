@@ -22,7 +22,7 @@ class Citation1(BaseModel):
     """
     target_paper_id: str
     """
-    If the cited work is itself in rrxiv, its paper ID. Null otherwise.
+    If the cited work is itself in rrxiv, its `id` (server-assigned UUIDv7). Null otherwise.
     """
     target_doi: str | None = Field(None, pattern="^10\\.[0-9]{4,9}/[-._;()/:a-zA-Z0-9]+$")
     """
@@ -65,7 +65,7 @@ class Citation2(BaseModel):
     """
     target_paper_id: str | None = None
     """
-    If the cited work is itself in rrxiv, its paper ID. Null otherwise.
+    If the cited work is itself in rrxiv, its `id` (server-assigned UUIDv7). Null otherwise.
     """
     target_doi: str = Field(..., pattern="^10\\.[0-9]{4,9}/[-._;()/:a-zA-Z0-9]+$")
     """
@@ -108,7 +108,7 @@ class Citation3(BaseModel):
     """
     target_paper_id: str | None = None
     """
-    If the cited work is itself in rrxiv, its paper ID. Null otherwise.
+    If the cited work is itself in rrxiv, its `id` (server-assigned UUIDv7). Null otherwise.
     """
     target_doi: str | None = Field(None, pattern="^10\\.[0-9]{4,9}/[-._;()/:a-zA-Z0-9]+$")
     """
@@ -151,7 +151,7 @@ class Citation4(BaseModel):
     """
     target_paper_id: str | None = None
     """
-    If the cited work is itself in rrxiv, its paper ID. Null otherwise.
+    If the cited work is itself in rrxiv, its `id` (server-assigned UUIDv7). Null otherwise.
     """
     target_doi: str | None = Field(None, pattern="^10\\.[0-9]{4,9}/[-._;()/:a-zA-Z0-9]+$")
     """
@@ -194,7 +194,7 @@ class Citation5(BaseModel):
     """
     target_paper_id: str | None = None
     """
-    If the cited work is itself in rrxiv, its paper ID. Null otherwise.
+    If the cited work is itself in rrxiv, its `id` (server-assigned UUIDv7). Null otherwise.
     """
     target_doi: str | None = Field(None, pattern="^10\\.[0-9]{4,9}/[-._;()/:a-zA-Z0-9]+$")
     """

@@ -30,6 +30,7 @@ from typing import Any, Literal
 # `timedelta` is already imported via `from datetime import ...` above —
 # the `_compute_cohorts` helper needs both `datetime` and `timedelta`,
 # both already in scope.
+from rrxiv.server.papers.slug import claim_owner_key
 from rrxiv.server.store import Store
 
 PulseWindow = Literal["7d", "30d", "90d", "all"]
@@ -240,14 +241,31 @@ def compute_pulse(
     contradiction_rate = _rate(by_status.get("contradicted", 0))
 
     # Third-party engagement: annotations not by the paper's own authors.
+    #
+    # Everything in this section keys papers by their *owner-key* — the
+    # citable id_slug (RRP-0013 / RRP-0029), which is what
+    # ``claim.paper_id`` and slug-based annotation targets carry — NOT
+    # the opaque machine ``id`` (a UUIDv7). For the legacy corpus where
+    # ``id == id_slug`` the two coincide.
     paper_authors_by_id: dict[str, set[str]] = {
-        p["id"]: _paper_author_identities(p) for p in data.papers
+        claim_owner_key(p): _paper_author_identities(p) for p in data.papers
     }
-    # Build a claim_id → paper_id resolver so we don't need to assume a
+    # Normalise a paper-targeting annotation's ``target_id`` (which may
+    # be a slug for authored/seeded annotations, or the machine ``id``
+    # for server-synthesised ones like revision summaries) to the
+    # owner-key.
+    paper_id_to_owner: dict[str, str] = {}
+    for p in data.papers:
+        owner = claim_owner_key(p)
+        paper_id_to_owner[owner] = owner
+        pid = p.get("id")
+        if isinstance(pid, str):
+            paper_id_to_owner[pid] = owner
+    # Build a claim_id → owner-key resolver so we don't need to assume a
     # particular claim-id string shape. The production convention is
     # "rrxiv:2605.00008:claim:c7" but tests + custom instances may use
     # shorter forms like "p1:c1"; using the stored paper_id field
-    # works for both.
+    # (the slug) works for both.
     claim_to_paper: dict[str, str] = {}
     for c in data.claims:
         cid = c.get("id")
@@ -257,10 +275,10 @@ def compute_pulse(
 
     def _resolve_paper_id(target_id: str, target_type: str | None) -> str | None:
         if target_type == "paper":
-            return target_id
+            return paper_id_to_owner.get(target_id, target_id)
         if target_id in claim_to_paper:
             return claim_to_paper[target_id]
-        # Production claim ids embed the paper id ("rrxiv:...:claim:cN").
+        # Production claim ids embed the paper slug ("rrxiv:...:claim:cN").
         if ":claim:" in target_id:
             return target_id.split(":claim:", 1)[0]
         return None
@@ -362,7 +380,8 @@ def compute_pulse(
     for p in data.papers:
         if p["id"] not in data.head_paper_ids:
             continue
-        owners = paper_authors_by_id.get(p["id"], set())
+        owner_key = claim_owner_key(p)
+        owners = paper_authors_by_id.get(owner_key, set())
         for a in data.annotations:
             target_id = a.get("target_id")
             if not isinstance(target_id, str):
@@ -371,7 +390,7 @@ def compute_pulse(
                 target_id,
                 a.get("target_type") if isinstance(a.get("target_type"), str) else None,
             )
-            if paper_id != p["id"]:
+            if paper_id != owner_key:
                 continue
             desc = _created_by_descriptor(a)
             if desc is None:
@@ -414,10 +433,16 @@ def compute_pulse(
         if paper_id is not None:
             annotations_per_paper[paper_id] += 1
 
-    paper_by_id: dict[str, dict[str, Any]] = {p["id"]: p for p in data.papers}
+    # Keyed by owner-key (the slug) because ``annotations_per_paper`` is
+    # populated from ``_resolve_paper_id`` (owner-keys). The emitted
+    # ``id`` is still the machine ``id`` per the pulse_snapshot schema
+    # (``id`` = UUIDv7; ``id_slug`` = the slug, separately).
+    paper_by_owner: dict[str, dict[str, Any]] = {
+        claim_owner_key(p): p for p in data.papers
+    }
 
-    def _paper_summary(pid: str) -> dict[str, Any] | None:
-        p = paper_by_id.get(pid)
+    def _paper_summary(owner_key: str) -> dict[str, Any] | None:
+        p = paper_by_owner.get(owner_key)
         if p is None:
             return None
         authors = [
@@ -426,7 +451,7 @@ def compute_pulse(
             if isinstance(a, dict)
         ]
         return {
-            "id": pid,
+            "id": p["id"],
             "id_slug": p.get("id_slug"),
             "title": p.get("title"),
             "authors": [a for a in authors if a],

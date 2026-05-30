@@ -34,6 +34,7 @@ from rrxiv.server.errors import (
     not_found,
     validation_error,
 )
+from rrxiv.server.papers.claim_ids import canonicalise_claim_ids
 from rrxiv.server.papers.diff import compute_revision_diff
 from rrxiv.server.store import (
     AnonymousIdentity,
@@ -172,6 +173,18 @@ async def submit_paper(
         else:
             cir_data["id_slug"] = mint_slug(store)
 
+    # Canonicalise the CIR's OWN claim-id / paper_id / intra-paper edge
+    # prefixes to the resolved citable id_slug (RRP-0013 / RRP-0029). The
+    # client builds claim ids at authoring time off a meta-slug (or a
+    # placeholder) that may differ from the slug resolved here — a brand-new
+    # paper can't know its minted slug, and euclid uses a repo-name prefix.
+    # Without this the claims are orphaned from the slug-keyed read filters
+    # (``claim_owner_key``). Cross-paper edges (other papers' slugs) are left
+    # untouched. Mirrors the seed-store path.
+    _slug = cir_data.get("id_slug")
+    if _slug:
+        canonicalise_claim_ids(cir_data, _slug)
+
     # Compute revision_diff for revision submissions (RRP-0017). Done
     # *before* persisting so dry-runs see it too.
     revision_diff_payload: dict[str, Any] | None = None
@@ -256,14 +269,18 @@ async def submit_paper(
     # and the paper metadata, leaving the claims invisible to the
     # read paths even though they were inside the CIR. Surfaced
     # live on whitepaper v3 (paper page showed "0 claims").
+    #
+    # Claim ids + ``claim.paper_id`` are CITABLE + slug-based
+    # (``<id_slug>:<local_label>`` / ``id_slug``) per RRP-0013 /
+    # RRP-0029 — built client-side at authoring time, before the
+    # server minted this paper's opaque machine ``id`` (a UUIDv7).
+    # So we store them VERBATIM; rewriting ``claim.paper_id`` to the
+    # machine ``id`` would orphan every claim from the slug-keyed
+    # read filters (``claim_owner_key``). This mirrors the seed path.
     for claim in cir_data.get("claims") or []:
         if not isinstance(claim, dict):
             continue
-        # Ensure the claim's paper_id reflects the (possibly newly
-        # minted) paper id, not whatever the client wrote.
-        cleaned_claim = dict(claim)
-        cleaned_claim["paper_id"] = paper_id
-        store.add_claim(cleaned_claim)
+        store.add_claim(dict(claim))
 
     # Synthesise a revision_summary annotation if the submitter passed
     # `revision_summary` (RRP-0017). The author can supersede this with
@@ -357,7 +374,12 @@ def _synthesise_revision_summary_annotation(
 
 
 def _mint_paper_id() -> str:
-    return f"paper-{uuid.uuid4().hex[:12]}"
+    """Mint the opaque machine ``id`` for a new paper: a UUIDv7 string
+    (RRP-0029). Time-ordered + collision-resistant; humans cite the
+    ``id_slug``, never this."""
+    from rrxiv.server.ids import uuid7
+
+    return str(uuid7())
 
 
 # ---- Source download + versions live on /papers/{id}/* ----

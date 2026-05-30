@@ -3,7 +3,7 @@
   "$id": "https://rrxiv.com/schema/v0/citation.schema.json",
   "title": "Citation",
   "description": "A citation from a rrxiv paper to another work. May reference another rrxiv paper (target_paper_id), an external work via DOI/arXiv/URL, or a raw BibTeX entry.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "object",
   "required": ["id", "key"],
   "properties": {
@@ -18,7 +18,7 @@
     },
     "target_paper_id": {
       "type": ["string", "null"],
-      "description": "If the cited work is itself in rrxiv, its paper ID. Null otherwise."
+      "description": "If the cited work is itself in rrxiv, its `id` (server-assigned UUIDv7). Null otherwise."
     },
     "target_doi": {
       "type": ["string", "null"],

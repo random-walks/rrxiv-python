@@ -27,7 +27,7 @@ from rrxiv.server.pagination import paginate
 from rrxiv.server.papers.diff import compute_revision_diff, papers_in_same_lineage
 from rrxiv.server.papers.projection import compute_stats, to_list_item
 from rrxiv.server.papers.scopes import filter_by_scope
-from rrxiv.server.papers.slug import find_paper_by_slug, is_slug
+from rrxiv.server.papers.slug import claim_owner_key, find_paper_by_slug, is_slug
 from rrxiv.server.store import Store
 
 router = APIRouter(prefix="/papers", tags=["Papers"])
@@ -229,11 +229,14 @@ def list_claims_for_paper(
     paper = _resolve_paper(store, paper_id)
     if paper is None:
         raise not_found(f"paper {paper_id} not found")
-    canonical_id = paper["id"]
+    # Claims are slug-keyed (claim.paper_id == paper.id_slug per
+    # RRP-0013 / RRP-0029), so filter on the slug, NOT paper["id"]
+    # (the opaque UUIDv7 storage PK).
+    owner_key = claim_owner_key(paper)
     items = [
         apply_derived_status(c, store)
         for c in store.list_claims()
-        if c.get("paper_id") == canonical_id
+        if c.get("paper_id") == owner_key
     ]
     return {"items": items, "next_cursor": None}
 
@@ -280,7 +283,7 @@ def get_paper_stats(paper_id: str, request: Request) -> dict[str, Any]:
     paper = _resolve_paper(store, paper_id)
     if paper is None:
         raise not_found(f"paper {paper_id} not found")
-    return compute_stats(paper["id"], store)
+    return compute_stats(claim_owner_key(paper), store)
 
 
 # ---------- Revision diff endpoint (RRP-0017) ------------------------
@@ -364,15 +367,18 @@ def list_errata(
     paper = _resolve_paper(store, paper_id)
     if paper is None:
         raise not_found(f"paper {paper_id} not found")
-    canonical_id = paper["id"]
+    # Annotations target the paper's slug (paper-level) or a slug-based
+    # claim id ``{id_slug}:claim:...`` (claim-level) per RRP-0013 /
+    # RRP-0029 — key off the slug, not paper["id"] (the UUIDv7 PK).
+    owner_key = claim_owner_key(paper)
 
     matches = [
         a
         for a in store.list_annotations()
         if a.get("annotation_type") == "erratum"
         and (
-            a.get("target_id") == canonical_id
-            or str(a.get("target_id", "")).startswith(f"{canonical_id}:")
+            a.get("target_id") == owner_key
+            or str(a.get("target_id", "")).startswith(f"{owner_key}:")
         )
     ]
     items, next_cursor = paginate(

@@ -27,7 +27,7 @@ class CanonicalIntermediateRepresentationCir(BaseModel):
     """
     id: str = Field(..., examples=["01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f"])
     """
-    Stable, canonical identifier for this paper. Format TBD; for v0 use UUIDv7. Once assigned, NEVER changes.
+    Stable, canonical machine identifier for this paper. Server-assigned UUIDv7 (RFC 9562) — opaque to clients; do NOT parse, derive, or construct it. Once assigned, NEVER changes. Humans cite the `id_slug`, not this. See RRP-0029.
     """
     version: str = Field(..., examples=["v1", "v2"], pattern="^v[0-9]+$")
     """
@@ -35,7 +35,7 @@ class CanonicalIntermediateRepresentationCir(BaseModel):
     """
     previous_version: str | None = None
     """
-    ID of the previous version of this paper, if any. Null for v1.
+    The previous version's `id` (server-assigned UUIDv7), if any. Null for v1.
     """
     title: str = Field(..., max_length=500, min_length=1)
     authors: list[paper_schema.Author] = Field(..., min_length=1)

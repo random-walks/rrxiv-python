@@ -24,6 +24,23 @@ def is_slug(s: str) -> bool:
     return SLUG_PATTERN.match(s) is not None
 
 
+def claim_owner_key(paper: dict[str, Any]) -> str:
+    """The identity a paper's claims + annotations are keyed off.
+
+    Claim ids are citable + slug-based: ``claim.id`` is
+    ``<id_slug>:<local_label>`` and ``claim.paper_id`` is the owning
+    paper's ``id_slug`` (RRP-0013, RRP-0029) — built client-side at
+    authoring time, before the server mints the opaque machine ``id``
+    (a UUIDv7). So every "which claims/annotations belong to this
+    paper?" filter must key off the slug, NOT ``paper["id"]``.
+
+    Falls back to ``paper["id"]`` for legacy/degenerate records that
+    never got a slug (and for the historical corpus where ``id`` and
+    ``id_slug`` were the same string).
+    """
+    return str(paper.get("id_slug") or paper["id"])
+
+
 def slug_yymm(now: datetime | None = None) -> str:
     """Return the YYMM segment for the given (UTC) timestamp; default: now()."""
     when = now or datetime.now(UTC)

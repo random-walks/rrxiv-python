@@ -156,3 +156,69 @@ def test_unknown_claim_id_structure_skipped() -> None:
     # No prefix detected → returns 0, leaves the claim as-is.
     assert _canonicalise_claim_ids(cir, CANONICAL) == 0
     assert cir["claims"][0]["id"] == "no-prefix-here"
+
+
+# ---- Slug targets (RRP-0013 / RRP-0029): claim ids key off the
+# citable id_slug, which itself contains a colon. ----
+
+SLUG = "rrxiv:2605.00009"
+
+
+def test_rewrites_metaslug_to_slug_target() -> None:
+    """Canonicalising a meta-slug-prefixed claim to the citable id_slug
+    (which contains its own colon) produces ``<id_slug>:<kind>:<label>``
+    — NOT a doubled slug."""
+    cir = _cir(
+        id_slug=SLUG,
+        claims=[
+            {
+                "id": f"{METASLUG}:prop:I.1",
+                "paper_id": METASLUG,
+                "depends_on": [f"{METASLUG}:prop:post:1"],
+            }
+        ],
+    )
+    n = _canonicalise_claim_ids(cir, SLUG)
+    assert n == 3  # 1 id + 1 paper_id + 1 edge
+    assert cir["claims"][0]["id"] == f"{SLUG}:prop:I.1"
+    assert cir["claims"][0]["paper_id"] == SLUG
+    assert cir["claims"][0]["depends_on"] == [f"{SLUG}:prop:post:1"]
+
+
+def test_noop_when_already_slug_based() -> None:
+    """An already-canonical slug-based claim id
+    (``rrxiv:YYMM.NNNNN:claim:cN``) must NOT be re-prefixed — the slug's
+    internal colon previously fooled the ``split(':', 1)`` heuristic
+    into doubling it (``rrxiv:2605.00009:2605.00009:...``)."""
+    cir = _cir(
+        id_slug=SLUG,
+        claims=[
+            {
+                "id": f"{SLUG}:claim:c1",
+                "paper_id": SLUG,
+                "depends_on": [f"{SLUG}:claim:c0"],
+            }
+        ],
+    )
+    assert _canonicalise_claim_ids(cir, SLUG) == 0
+    assert cir["claims"][0]["id"] == f"{SLUG}:claim:c1"
+    assert cir["claims"][0]["paper_id"] == SLUG
+    assert cir["claims"][0]["depends_on"] == [f"{SLUG}:claim:c0"]
+
+
+def test_slug_target_leaves_cross_paper_slug_edges_alone() -> None:
+    """When already slug-based, a cross-paper edge to ANOTHER paper's
+    slug-based claim id stays verbatim."""
+    other = "rrxiv:2605.00008"
+    cir = _cir(
+        id_slug=SLUG,
+        claims=[
+            {
+                "id": f"{SLUG}:claim:c1",
+                "paper_id": SLUG,
+                "depends_on": [f"{other}:claim:c1"],
+            }
+        ],
+    )
+    assert _canonicalise_claim_ids(cir, SLUG) == 0
+    assert cir["claims"][0]["depends_on"] == [f"{other}:claim:c1"]

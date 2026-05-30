@@ -735,33 +735,89 @@ def test_submit_persists_claims_into_claims_table() -> None:
     """
     app, sync = _client_with_orcid_bearer()
 
+    # Claim ids + claim.paper_id are slug-based (RRP-0013 / RRP-0029):
+    # the client builds them off the paper's citable id_slug, and the
+    # server stores them verbatim (it does NOT rewrite them to the
+    # opaque machine id). Mirror that realistic shape here.
+    slug = "rrxiv:2605.00077"
     paper = _paper("p-claims-persisted")
+    paper["id_slug"] = slug
     paper["claims"] = [
-        _claim("p-claims-persisted:c1", "p-claims-persisted", statement="First claim."),
-        _claim("p-claims-persisted:c2", "p-claims-persisted", statement="Second claim."),
-        _claim("p-claims-persisted:c3", "p-claims-persisted", statement="Third claim."),
+        _claim(f"{slug}:claim:c1", slug, statement="First claim."),
+        _claim(f"{slug}:claim:c2", slug, statement="Second claim."),
+        _claim(f"{slug}:claim:c3", slug, statement="Third claim."),
     ]
     resp = _submit(sync, paper, b"bundle")
     assert resp.status_code == 201, resp.text
 
-    # Store must now have the three claim rows individually.
+    # Store must now have the three claim rows individually, keyed off
+    # the slug (not the machine id).
     stored_claims = [
-        c for c in app.state.store.list_claims()
-        if c.get("paper_id") == "p-claims-persisted"
+        c for c in app.state.store.list_claims() if c.get("paper_id") == slug
     ]
     assert len(stored_claims) == 3, stored_claims
 
-    # And the public read paths must surface them.
+    # And the public read paths must surface them — resolvable via both
+    # the machine id and the slug.
     list_resp = sync.get("/papers/p-claims-persisted/claims")
+    list_resp_slug = sync.get(f"/papers/{slug}/claims")
     sync.close()
     assert list_resp.status_code == 200
     items = list_resp.json()["items"]
     assert len(items) == 3
     assert {c["id"] for c in items} == {
-        "p-claims-persisted:c1",
-        "p-claims-persisted:c2",
-        "p-claims-persisted:c3",
+        f"{slug}:claim:c1",
+        f"{slug}:claim:c2",
+        f"{slug}:claim:c3",
     }
+    assert list_resp_slug.status_code == 200
+    assert len(list_resp_slug.json()["items"]) == 3
+
+
+def test_submit_canonicalises_claims_to_resolved_slug() -> None:
+    """A freshly-submitted paper whose claims were built off a non-slug
+    meta-prefix (the client can't know the server-minted slug) has its OWN
+    claim ids / paper_id / intra-paper edges canonicalised to the resolved
+    id_slug, so claims stay reachable via the slug-keyed read filters.
+    Cross-paper edges (other papers' slugs) survive verbatim. RRP-0013/0029.
+    """
+    app, sync = _client_with_orcid_bearer()
+
+    paper = _paper("rrxiv-paper-foo")  # build-time meta prefix, not a citable slug
+    paper["claims"] = [
+        _claim(
+            "rrxiv-paper-foo:claim:c1",
+            "rrxiv-paper-foo",
+            statement="Local claim one.",
+            depends_on=["rrxiv:2401.09999:claim:c1"],  # cross-paper edge
+        ),
+        _claim(
+            "rrxiv-paper-foo:claim:c2",
+            "rrxiv-paper-foo",
+            statement="Local claim two.",
+            depends_on=["rrxiv-paper-foo:claim:c1"],  # intra-paper edge
+        ),
+    ]
+
+    resp = _submit(sync, paper, b"bundle")
+    assert resp.status_code == 201, resp.text
+    minted_slug = resp.json()["id_slug"]
+    assert minted_slug.startswith("rrxiv:")
+
+    r = sync.get(f"/papers/{minted_slug}/claims")
+    sync.close()
+    assert r.status_code == 200, r.text
+    items = {c["id"]: c for c in r.json()["items"]}
+    # own claim ids + paper_id rewritten to the resolved slug
+    assert set(items) == {f"{minted_slug}:claim:c1", f"{minted_slug}:claim:c2"}
+    assert all(c["paper_id"] == minted_slug for c in items.values())
+    # intra-paper edge rewritten; cross-paper edge preserved verbatim
+    assert items[f"{minted_slug}:claim:c2"]["depends_on"] == [
+        f"{minted_slug}:claim:c1"
+    ]
+    assert items[f"{minted_slug}:claim:c1"]["depends_on"] == [
+        "rrxiv:2401.09999:claim:c1"
+    ]
 
 
 def test_paper_versions_endpoint_cycle_safe() -> None:

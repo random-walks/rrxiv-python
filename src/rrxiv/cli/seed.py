@@ -152,71 +152,39 @@ def _sibling_source(cir_path: Path) -> Path | None:
 def _canonicalise_claim_ids(cir: dict[str, Any], paper_id: str) -> int:
     """Rewrite every claim id / paper_id / edge target / annotation
     target_id that uses the parser's meta-slug prefix to use the
-    canonical ``paper_id`` (the CIR's ``id``, which is the UUIDv7 the
-    instance keys claims off).
+    paper's citable ``id_slug``.
 
-    Why: ``rrxiv parse`` stamps IDs as ``<meta_slug>:<kind>:<label>``
-    because at build-time the canonical UUID isn't known. Seed-store
-    sees the canonical UUID as ``cir["id"]`` — substitute every
-    parser-prefix occurrence accordingly so the deployed instance
-    finds the claims (``list_claims_for_paper(paper_id=...)``).
+    Claim ids are CITABLE + slug-based: ``claim.id`` is
+    ``<id_slug>:<local_label>`` and ``claim.paper_id`` is the owning
+    paper's ``id_slug`` (RRP-0013, RRP-0029). They key off the citable
+    ``id_slug`` — NOT the opaque machine ``id`` (a UUIDv7), which the
+    server mints only at submission and which the read paths use solely
+    as a storage PK. The caller therefore passes the paper's ``id_slug``
+    as ``paper_id`` here.
 
-    Idempotent: if the CIR already uses ``paper_id`` as the prefix
-    (e.g.\\ a manually-curated demo fixture), this is a no-op.
+    Why any rewrite at all: ``rrxiv parse`` stamps IDs as
+    ``<meta_slug>:<kind>:<label>`` using the paper repo's
+    ``rrxiv-meta.json`` slug (e.g. ``rrxiv-paper-euclid-elements``),
+    which is *not* the citable ``rrxiv:YYMM.NNNNN`` slug minted at
+    seed/submit time. Substitute every local parser-prefix occurrence
+    so the deployed instance finds the claims via the slug-keyed filter
+    (``claim_owner_key`` → ``list_claims_for_paper``).
+
+    Only the OWN-paper prefix is rewritten. Cross-paper edges
+    (depends_on / supports / contradicts / extends) that reference
+    OTHER papers' claim ids stay untouched, because ``_rewrite`` only
+    touches strings starting with the local parser prefix.
+
+    Idempotent: if the CIR already uses ``paper_id`` (the id_slug) as
+    the prefix (e.g.\\ a manually-curated demo fixture), this is a
+    no-op.
 
     Returns the number of substitutions made — useful for both
     progress reporting and tests.
     """
-    claims = cir.get("claims") or []
-    if not claims:
-        return 0
+    from rrxiv.server.papers.claim_ids import canonicalise_claim_ids
 
-    # All claims from a single parse run share the same prefix. Peek
-    # at the first one to discover what the parser emitted.
-    sample_id = claims[0].get("id") or ""
-    parts = sample_id.split(":", 1)
-    if len(parts) != 2:
-        return 0
-    parser_prefix = parts[0]
-    if parser_prefix == paper_id:
-        # Already canonical or no prefix to rewrite.
-        return 0
-
-    old = parser_prefix + ":"
-    new = paper_id + ":"
-
-    def _rewrite(s: str) -> str:
-        return new + s[len(old) :] if s.startswith(old) else s
-
-    n = 0
-    for c in claims:
-        if (cid := c.get("id")) and cid.startswith(old):
-            c["id"] = _rewrite(cid)
-            n += 1
-        if c.get("paper_id") != paper_id:
-            c["paper_id"] = paper_id
-            n += 1
-        for key in ("depends_on", "supports", "contradicts", "extends"):
-            edges = c.get(key)
-            if not edges:
-                continue
-            new_edges = [_rewrite(t) for t in edges]
-            if new_edges != edges:
-                c[key] = new_edges
-                n += sum(
-                    1 for a, b in zip(edges, new_edges, strict=True) if a != b
-                )
-
-    # Annotations targeting claims also need their target_id rewritten.
-    # Annotations targeting other papers (cross-paper context) are
-    # safe because _rewrite only touches strings starting with the
-    # local parser prefix.
-    for ann in cir.get("annotations") or []:
-        if (tid := ann.get("target_id")) and tid.startswith(old):
-            ann["target_id"] = _rewrite(tid)
-            n += 1
-
-    return n
+    return canonicalise_claim_ids(cir, paper_id)
 
 
 def _sibling_pdf(cir_path: Path) -> Path | None:
@@ -391,8 +359,13 @@ def load_cir_into_store(
             fg="yellow",
         )
 
-    # Canonicalise parser-stamped meta-slug prefixes to canonical UUIDs.
-    rewrites = _canonicalise_claim_ids(cir, paper_id)
+    # Canonicalise parser-stamped meta-slug prefixes to the paper's
+    # citable id_slug. Claim ids + claim.paper_id are slug-based per
+    # RRP-0013 / RRP-0029 — they key off the citable id_slug, NOT the
+    # opaque machine ``id`` (UUIDv7) the store uses as a PK. Falling
+    # back to ``paper_id`` keeps legacy slug-less fixtures working.
+    claim_owner = cir.get("id_slug") or paper_id
+    rewrites = _canonicalise_claim_ids(cir, claim_owner)
     if rewrites and not quiet:
         typer.echo(
             f"    canonicalised {rewrites} id/paper_id/edge references"
@@ -428,7 +401,12 @@ def load_cir_into_store(
 
     claims_added = 0
     for claim in cir.get("claims") or []:
-        claim["paper_id"] = paper_id
+        # claim.paper_id is the owning paper's citable id_slug (slug-based,
+        # per RRP-0013 / RRP-0029) — NOT the opaque machine ``id``.
+        # Canonicalisation above already set it on prefixed claims; stamp
+        # it here too so slug-less legacy fixtures still get keyed
+        # correctly for the slug-based read filters (``claim_owner_key``).
+        claim["paper_id"] = claim_owner
         store.add_claim(claim)
         claims_added += 1
 

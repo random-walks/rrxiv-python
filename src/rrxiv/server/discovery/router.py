@@ -11,6 +11,7 @@ from fastapi import APIRouter, Query, Request
 from rrxiv.server.deps import get_store
 from rrxiv.server.papers.projection import compute_stats
 from rrxiv.server.papers.scopes import SCOPES
+from rrxiv.server.papers.slug import claim_owner_key
 from rrxiv.server.store import Store
 
 router = APIRouter(tags=["Discovery"])
@@ -111,9 +112,12 @@ def corpus_stats(request: Request) -> dict[str, Any]:
     by_status: Counter[str] = Counter()
     active_studies = 0
     for paper in papers:
-        stats = compute_stats(paper["id"], store)
+        # Claims are slug-keyed (claim.paper_id == id_slug); use the
+        # slug, not paper["id"] (the UUIDv7 PK). RRP-0013 / RRP-0029.
+        owner_key = claim_owner_key(paper)
+        stats = compute_stats(owner_key, store)
         by_status[stats["status"]] += 1
-        paper_claims = [c for c in claims if c.get("paper_id") == paper["id"]]
+        paper_claims = [c for c in claims if c.get("paper_id") == owner_key]
         if stats["status"] == "untested" and len(paper_claims) > 4:
             active_studies += 1
 

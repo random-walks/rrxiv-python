@@ -3,7 +3,7 @@
   "$id": "https://rrxiv.com/schema/v0/paper.schema.json",
   "title": "Paper",
   "description": "A rrxiv paper's metadata. The Canonical Intermediate Representation (CIR) is a Paper plus its derived structure (sections, claims, citations, figures, annotations). Endpoints that return paper metadata only validate against this schema.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "object",
   "required": ["rrxiv_version", "id", "version", "title", "authors", "abstract", "submitted_at", "license", "source"],
   "properties": {
@@ -15,7 +15,7 @@
     },
     "id": {
       "type": "string",
-      "description": "Stable, canonical identifier for this paper. Format TBD; for v0 use UUIDv7. Once assigned, NEVER changes.",
+      "description": "Stable, canonical machine identifier for this paper. Server-assigned UUIDv7 (RFC 9562) — opaque to clients; do NOT parse, derive, or construct it. Once assigned, NEVER changes. Humans cite the `id_slug`, not this. See RRP-0029.",
       "examples": ["01923f8e-5b2a-7c4d-9e1f-3a2b1c0d4e5f"]
     },
     "id_slug": {
@@ -32,7 +32,7 @@
     },
     "previous_version": {
       "type": ["string", "null"],
-      "description": "ID of the previous version of this paper, if any. Null for v1."
+      "description": "The previous version's `id` (server-assigned UUIDv7), if any. Null for v1."
     },
     "title": {
       "type": "string",
