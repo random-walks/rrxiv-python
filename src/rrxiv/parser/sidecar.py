@@ -138,7 +138,7 @@ def parse_sidecar_text(text: str) -> Sidecar:
     # ModelDescriptor fields. Anything not on this list is dropped
     # silently — future cls versions can add new keys without
     # breaking older parsers.
-    _AUTHOR_KEYS = frozenset((
+    _AUTHOR_KEYS = frozenset((  # noqa: N806 — intentional local constant
         "name",
         "orcid",
         "role",

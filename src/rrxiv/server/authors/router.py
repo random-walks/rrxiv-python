@@ -114,7 +114,11 @@ def _author_records(store: Store) -> dict[str, dict[str, Any]]:
                     "key": other_key,
                     "name": other_name,
                     "orcid": other_orcid if other_orcid and _is_orcid(other_orcid) else None,
-                    "agent_handle": other_handle if other_handle and _is_agent_handle(other_handle) else None,
+                    "agent_handle": (
+                        other_handle
+                        if other_handle and _is_agent_handle(other_handle)
+                        else None
+                    ),
                     "is_agent": bool(other.get("is_agent")) or bool(other_handle),
                 }
 
@@ -211,7 +215,7 @@ def _resolve_record(
         return records.get(ident), "human"
     # Try the name-shaped key first (URL-decoded), then bare-name fallback.
     rec = records.get(ident) or records.get(f"name:{ident.lower()}")
-    return rec, ("name" if rec else "name")
+    return rec, "name"
 
 
 @router.get("/{ident}")

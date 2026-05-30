@@ -25,13 +25,11 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
 
-from rrxiv.server.deps import AuthedRequest, require_identity
-
 from rrxiv.server.auth.templates import (
     render_anonymous_hcaptcha,
     render_orcid_paste,
 )
-from rrxiv.server.deps import get_settings, get_store
+from rrxiv.server.deps import AuthedRequest, get_settings, get_store, require_identity
 from rrxiv.server.errors import (
     bad_request,
     forbidden,

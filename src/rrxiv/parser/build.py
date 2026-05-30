@@ -931,8 +931,6 @@ def _merge_meta_onto_authors(
     if not meta_authors:
         return parsed
 
-    by_parsed_name: dict[str, dict[str, Any]] = {a["name"].strip(): a for a in parsed}
-
     used_meta: set[int] = set()
     for parsed_author in parsed:
         target = parsed_author["name"].strip()

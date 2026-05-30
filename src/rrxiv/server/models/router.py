@@ -120,7 +120,7 @@ def _load_registry() -> dict[str, Any]:
         return _cache[1]
 
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:  # pragma: no cover - malformed
         _log.warning("model registry parse failed (%s): %s", path, e)
         return {"version": "0.0.0", "updated_at": None, "entries": []}
@@ -148,7 +148,7 @@ def _corpus_aggregation(store: Store) -> dict[str, dict[str, Any]]:
     """
     buckets: dict[str, dict[str, Any]] = {}
     for paper in store.list_papers():
-        # Use the projection helper to walk every agent author × every
+        # Use the projection helper to walk every agent author x every
         # ModelDescriptor reliably.
         item = {"authors": paper.get("authors") or []}
         seen_in_paper: set[str] = set()

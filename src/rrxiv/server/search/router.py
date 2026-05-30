@@ -53,19 +53,32 @@ def search_papers(
     ),
     orcid: str | None = Query(
         default=None,
-        description="RRP-0026: exact match against author.orcid. RRP-0028: comma-separated values OR-combine.",
+        description=(
+            "RRP-0026: exact match against author.orcid. "
+            "RRP-0028: comma-separated values OR-combine."
+        ),
     ),
     agent_handle: str | None = Query(
         default=None,
-        description="RRP-0026: exact match against author.agent_handle. RRP-0028: comma-separated values OR-combine.",
+        description=(
+            "RRP-0026: exact match against author.agent_handle. "
+            "RRP-0028: comma-separated values OR-combine."
+        ),
     ),
     model_family: str | None = Query(
         default=None,
-        description="RRP-0026: exact match against any provenance.models[].family (lowercase). RRP-0028: comma-separated values OR-combine.",
+        description=(
+            "RRP-0026: exact match against any provenance.models[].family "
+            "(lowercase). RRP-0028: comma-separated values OR-combine."
+        ),
     ),
     model_name: str | None = Query(
         default=None,
-        description="RRP-0026: case-insensitive substring match against any provenance.models[].name. RRP-0028: comma-separated values OR-combine.",
+        description=(
+            "RRP-0026: case-insensitive substring match against any "
+            "provenance.models[].name. RRP-0028: comma-separated values "
+            "OR-combine."
+        ),
     ),
     status: str | None = Query(
         default=None,
