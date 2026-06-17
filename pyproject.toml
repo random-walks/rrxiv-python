@@ -17,7 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 agent = [
-    "cryptography>=42.0",
+    "cryptography>=48.0.1",
     "http-message-signatures>=2.0,<3",
 ]
 cli = [
@@ -27,7 +27,7 @@ server = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.30",
     "python-multipart>=0.0.9",
-    "cryptography>=42.0",
+    "cryptography>=48.0.1",
     "http-message-signatures>=2.0,<3",
     # Optional error reporting. The SDK no-ops at runtime unless
     # SENTRY_DSN is set, so this dep is safe to include unconditionally.
@@ -40,7 +40,7 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10",
     "datamodel-code-generator>=0.25",
-    "cryptography>=42.0",
+    "cryptography>=48.0.1",
     "http-message-signatures>=2.0,<3",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.30",
