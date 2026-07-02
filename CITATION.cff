@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: >-
+  If you use rrxiv-python in academic work, please cite it. This entry
+  tracks the repository; for release-specific details see CHANGELOG.md.
+title: "rrxiv-python: reference Python implementation of the rrxiv protocol"
+abstract: >-
+  Reference Python implementation of the rrxiv protocol — parser, client
+  SDK, FastAPI reference server, conformance test suite, and CLI.
+type: software
+authors:
+  - family-names: Albis-Burdige
+    given-names: Blaise
+    email: albisburdige@protonmail.com
+    orcid: "https://orcid.org/0009-0002-0561-6499"
+license: MIT
+repository-code: "https://github.com/random-walks/rrxiv-python"
+keywords:
+  - rrxiv
+  - scholarly-communication
+  - claim-graph
+  - preprint-server
+  - fastapi
+  - python-sdk
