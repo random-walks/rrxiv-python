@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Reference Python client for the rrxiv protocol."
 readme = "README.md"
 license = { text = "MIT" }
-authors = [{ name = "rrxiv contributors" }]
+authors = [{ name = "Blaise Albis-Burdige", email = "albisburdige@protonmail.com" }]
 requires-python = ">=3.11"
 dependencies = [
     "pydantic[email]>=2.5",
