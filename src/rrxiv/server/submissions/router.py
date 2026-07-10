@@ -138,20 +138,36 @@ async def submit_paper(
 
     store: Store = get_store(request)
 
-    # ID assignment: if the CIR carries an `id` use it (revisions); else
-    # mint a fresh one. Per spec/0005-submission.md, server is the
-    # authority on paper IDs for new submissions; we honour client IDs
-    # only for the revision-of path.
-    paper_id = cir_obj.id or _mint_paper_id()
-
-    # Collision guard: each version must have a UNIQUE paper_id. If the
-    # CIR's id matches the previous_version, the new revision would
-    # overwrite its predecessor and introduce a self-loop in the
-    # lineage chain (paper.id == paper.previous_version). Mint a fresh
-    # paper_id instead — the slug stays stable across versions (per
-    # RRP-0013), only the per-version internal id changes.
-    if previous_version and paper_id == previous_version:
+    # ID assignment (RRP-0029). The server is the SOLE authority on the
+    # opaque machine ``id`` of a NEW paper. Honouring a client-supplied
+    # CIR ``id`` here was a security hole: both stores upsert blind (no
+    # existence check), so a submitter echoing an existing paper's id —
+    # e.g. any seeded-corpus id, or the ``rrxiv parse`` default derived
+    # from the tex file stem like "main" — would silently OVERWRITE that
+    # paper. So for non-revision submissions we ALWAYS mint server-side
+    # and ignore ``cir_obj.id`` entirely. The claim-id canonicalisation
+    # below rewrites the CIR's own claim/paper_id prefixes to the minted
+    # ``id_slug``, so dropping the client id is safe.
+    #
+    # Revisions keep honouring the CIR id — ``previous_version``
+    # legitimately targets an existing paper's lineage, and each version
+    # is its own record.
+    if previous_version:
+        paper_id = cir_obj.id or _mint_paper_id()
+        # Collision guard: each version needs a UNIQUE paper_id. If the
+        # CIR's id matches the previous_version, the new revision would
+        # overwrite its predecessor and introduce a self-loop in the
+        # lineage chain (paper.id == paper.previous_version). Mint a
+        # fresh paper_id instead — the slug stays stable across versions
+        # (RRP-0013), only the per-version internal id changes.
+        if paper_id == previous_version:
+            paper_id = _mint_paper_id()
+    else:
         paper_id = _mint_paper_id()
+        # Defence-in-depth: a fresh UUIDv7 practically cannot collide,
+        # but never clobber an existing record if one somehow shares it.
+        while store.get_paper(paper_id) is not None:
+            paper_id = _mint_paper_id()
 
     cir_data["id"] = paper_id
     if previous_version:

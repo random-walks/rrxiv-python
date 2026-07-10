@@ -140,25 +140,28 @@ def test_protocol_e2e_conformance(live_server: Any) -> None:
         )
     assert resp.status_code == 201, resp.text
     submit_body = resp.json()
-    assert submit_body["paper_id"] == "p-conformance"
+    # RRP-0029: the server mints the machine id for a new submission and
+    # ignores the client-supplied CIR id ("p-conformance").
+    paper_id = submit_body["paper_id"]
+    assert paper_id and paper_id != "p-conformance"
 
     # ---- Step 3: paper shows up in /papers ----
     with RrxivClient(api_base, auth=bearer, agent_signing_key=signing) as client:
         page = client.list_papers()
-        assert any(p["id"] == "p-conformance" for p in page["items"])
+        assert any(p["id"] == paper_id for p in page["items"])
 
         # ---- Step 4: search finds it ----
         with httpx.Client() as raw:
             search = raw.get(f"{api_base}/search/papers", params={"q": "conformance"})
         assert search.status_code == 200
         ids = [p["id"] for p in search.json()["items"]]
-        assert "p-conformance" in ids
+        assert paper_id in ids
 
         # ---- Step 5: annotate as the agent (signed) ----
         ann = client.create_annotation(
             {
                 "id": "ann-conformance-1",
-                "target_id": "p-conformance",
+                "target_id": paper_id,
                 "target_type": "paper",
                 "annotation_type": "comment",
                 "content": "Conformance suite test annotation.",
@@ -207,5 +210,5 @@ def test_protocol_e2e_conformance(live_server: Any) -> None:
 
     with tarfile.open(fileobj=io.BytesIO(blob_resp.content), mode="r:gz") as tar:
         names = tar.getnames()
-        assert "papers/p-conformance.json" in names
+        assert f"papers/{paper_id}.json" in names
         assert "annotations/ann-conformance-1.json" in names

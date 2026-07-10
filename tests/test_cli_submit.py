@@ -148,11 +148,15 @@ def test_cli_submit_v1_happy_path(
     )
     assert code == 0, out
     body = json.loads(out)
-    assert body["paper_id"] == "p-cli-v1"
+    # Server mints the id for a new submission (RRP-0029); the client
+    # CIR id ("p-cli-v1") is ignored.
+    paper_id = body["paper_id"]
+    assert paper_id != "p-cli-v1"
     assert body["version"] == "v1"
     assert body["would_persist"] is True
     assert body["dry_run"] is False
-    assert app.state.store.get_paper("p-cli-v1") is not None
+    assert app.state.store.get_paper(paper_id) is not None
+    assert app.state.store.get_paper("p-cli-v1") is None
 
 
 def test_cli_submit_dry_run_does_not_persist(
@@ -273,7 +277,8 @@ def test_cli_submit_sends_bundle_hash_by_default(
     )
     assert code == 0, out
     body = json.loads(out)
-    assert body["paper_id"] == "p-cli-hash"
+    # Server mints the id (RRP-0029); the client CIR id is ignored.
+    assert body["paper_id"] and body["paper_id"] != "p-cli-hash"
     # Independently confirm the hash matches the bundle bytes.
     assert correct_hash == hashlib.sha256(bundle_path.read_bytes()).hexdigest()
 
