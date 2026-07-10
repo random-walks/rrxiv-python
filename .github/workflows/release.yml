@@ -51,8 +51,6 @@ jobs:
 
       - uses: astral-sh/setup-uv@v3
         if: steps.v.outputs.release == 'true'
-        with:
-          python-version: "3.11"
 
       - name: Build sdist + wheel
         if: steps.v.outputs.release == 'true'

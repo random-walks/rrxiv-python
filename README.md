@@ -2,38 +2,34 @@
 
 Reference Python implementation of the [rrxiv protocol](https://github.com/random-walks/rrxiv) — parser, client SDK, FastAPI reference server, conformance test suite, and CLI.
 
-**Status: v0.1 — running in production at [api.rrxiv.com](https://api.rrxiv.com/api/v0/docs).** Not yet on PyPI; install from the git ref.
+**Status: v0.1 — on PyPI (`pip install rrxiv`) and running in production at [api.rrxiv.com](https://api.rrxiv.com/api/v0/docs).**
 
 ## Installation
 
-Not yet on PyPI — install from the git ref (the quotes are required so
-the shell doesn't try to glob the extras brackets):
+Install from PyPI (the quotes on the extras are required so the shell
+doesn't try to glob the brackets):
 
 ```bash
 # Library + parser only
-pip install "rrxiv @ git+https://github.com/random-walks/rrxiv-python.git"
+pip install rrxiv
 
 # Author CLI (login + submit): adds keyring credential storage
-pip install "rrxiv[cli] @ git+https://github.com/random-walks/rrxiv-python.git"
+pip install "rrxiv[cli]"
 
 # Agent identity (Ed25519 request signing, RFC 9421)
-pip install "rrxiv[agent] @ git+https://github.com/random-walks/rrxiv-python.git"
+pip install "rrxiv[agent]"
 
 # Reference server (FastAPI, uvicorn, ed25519 signatures, sentry, etc.)
-pip install "rrxiv[server] @ git+https://github.com/random-walks/rrxiv-python.git"
+pip install "rrxiv[server]"
 ```
 
 Extras compose — an author who also runs an agent wants `rrxiv[cli,agent]`.
-Pin a specific commit or branch by appending `@<ref>` (e.g. `.git@main`).
 
 Or with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv add "rrxiv[server] @ git+https://github.com/random-walks/rrxiv-python.git"
+uv add "rrxiv[server]"
 ```
-
-Once the package is published to PyPI this shortens to `pip install rrxiv`
-(or `pip install "rrxiv[cli]"`, `pip install "rrxiv[server]"`, …).
 
 ## Quick tour
 
