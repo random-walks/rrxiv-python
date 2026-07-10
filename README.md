@@ -6,19 +6,34 @@ Reference Python implementation of the [rrxiv protocol](https://github.com/rando
 
 ## Installation
 
+Not yet on PyPI — install from the git ref (the quotes are required so
+the shell doesn't try to glob the extras brackets):
+
 ```bash
 # Library + parser only
-pip install "rrxiv @ git+https://github.com/random-walks/rrxiv-python.git@main"
+pip install "rrxiv @ git+https://github.com/random-walks/rrxiv-python.git"
 
-# Library + server (FastAPI, uvicorn, ed25519 signatures, sentry, etc.)
-pip install "rrxiv[server] @ git+https://github.com/random-walks/rrxiv-python.git@main"
+# Author CLI (login + submit): adds keyring credential storage
+pip install "rrxiv[cli] @ git+https://github.com/random-walks/rrxiv-python.git"
+
+# Agent identity (Ed25519 request signing, RFC 9421)
+pip install "rrxiv[agent] @ git+https://github.com/random-walks/rrxiv-python.git"
+
+# Reference server (FastAPI, uvicorn, ed25519 signatures, sentry, etc.)
+pip install "rrxiv[server] @ git+https://github.com/random-walks/rrxiv-python.git"
 ```
+
+Extras compose — an author who also runs an agent wants `rrxiv[cli,agent]`.
+Pin a specific commit or branch by appending `@<ref>` (e.g. `.git@main`).
 
 Or with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv add "rrxiv[server] @ git+https://github.com/random-walks/rrxiv-python.git@main"
+uv add "rrxiv[server] @ git+https://github.com/random-walks/rrxiv-python.git"
 ```
+
+Once the package is published to PyPI this shortens to `pip install rrxiv`
+(or `pip install "rrxiv[cli]"`, `pip install "rrxiv[server]"`, …).
 
 ## Quick tour
 
@@ -54,8 +69,13 @@ rrxiv serve \
 rrxiv seed-store --from ./seed --store sqlite:////data/rrxiv.db
 
 # When claim ids change between releases, --reset wipes the corpus tables
-# before re-seeding so no orphan rows linger
+# before re-seeding so no orphan rows linger (dev-only: also drops any
+# externally submitted papers + all annotations)
 rrxiv seed-store --from ./seed --store sqlite:////data/rrxiv.db --reset
+
+# On a LIVE instance, --preserve-community refreshes only the seed papers
+# and keeps every externally submitted paper + all annotations
+rrxiv seed-store --from ./seed --store sqlite:////data/rrxiv.db --preserve-community
 ```
 
 `seed-store` also stamps `paper.source.uri` / `paper.source.rendered_pdf_uri` with the canonical `/api/v0/papers/{id}/{source,pdf}` endpoints so the web client can resolve them.

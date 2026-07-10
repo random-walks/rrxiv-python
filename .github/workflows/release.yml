@@ -1,0 +1,34 @@
+name: release
+
+# Publish to PyPI when a GitHub Release is *published* (NOT on tag push).
+# The maintainer creates the Release manually; this job then builds the
+# sdist + wheel with `uv build` and uploads them via PyPI Trusted
+# Publishing (OIDC) — so there is no PyPI API token stored in the repo.
+#
+# One-time setup (maintainer, external to this repo):
+#   1. Configure a PyPI Trusted Publisher for project "rrxiv" pointing at
+#      owner `random-walks`, repo `rrxiv-python`, workflow `release.yml`.
+#   2. Create a GitHub Release tagged `v0.1.0` → this workflow publishes.
+on:
+  release:
+    types: [published]
+
+jobs:
+  pypi-publish:
+    name: Build + publish to PyPI (Trusted Publishing)
+    runs-on: ubuntu-latest
+    permissions:
+      # Required for PyPI Trusted Publishing: lets the job mint a
+      # short-lived OIDC token PyPI trades for an upload token.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.11"
+      - name: Build sdist + wheel
+        run: uv build
+      - name: Publish to PyPI
+        # No username/password/token: the action uses the OIDC token
+        # above for Trusted Publishing. Reads distributions from dist/.
+        uses: pypa/gh-action-pypi-publish@release/v1
