@@ -6,6 +6,7 @@ from __future__ import annotations
 import io
 import json
 import tarfile
+import uuid
 from typing import Any
 
 import httpx
@@ -15,6 +16,31 @@ from rrxiv.auth import exchange_orcid_code
 from rrxiv.server import ServerSettings, build_app
 
 pytest.importorskip("fastapi")
+
+
+def _assert_is_uuid7(value: str) -> None:
+    """Assert ``value`` is a canonical UUIDv7 string (RRP-0029)."""
+    parsed = uuid.UUID(value)
+    assert parsed.version == 7, f"expected UUIDv7, got version {parsed.version}"
+    assert parsed.variant == uuid.RFC_4122
+    assert not value.startswith("paper-"), value
+
+
+def _submit(
+    sync: httpx.Client,
+    cir: dict[str, Any],
+    bundle_bytes: bytes = b"x",
+) -> str:
+    """POST a non-revision submission and return the server-minted paper_id."""
+    resp = sync.post(
+        "/submissions",
+        files={
+            "cir": ("c.json", json.dumps(cir).encode("utf-8"), "application/json"),
+            "bundle": ("p.tar.gz", bundle_bytes, "application/gzip"),
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["paper_id"]  # type: ignore[no-any-return]
 
 
 def _fixture_paper(paper_id: str = "p-fixture") -> dict[str, Any]:
@@ -81,9 +107,57 @@ def test_submit_paper_round_trip() -> None:
     sync.close()
     assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body["paper_id"] == "p-fixture"
-    assert body["retrieval_uri"].endswith("/papers/p-fixture/source")
-    assert "p-fixture" in app.state.store.state.papers
+    # RRP-0029: the server mints the machine id for a new submission and
+    # ignores the client-supplied CIR id ("p-fixture").
+    paper_id = body["paper_id"]
+    assert paper_id != "p-fixture"
+    _assert_is_uuid7(paper_id)
+    assert body["retrieval_uri"].endswith(f"/papers/{paper_id}/source")
+    assert paper_id in app.state.store.state.papers
+    # The client id was NOT used as a storage key.
+    assert "p-fixture" not in app.state.store.state.papers
+
+
+def test_submit_new_paper_id_is_server_minted_uuid7() -> None:
+    """RRP-0029 security: a fresh (non-revision) submission's paper_id is
+    a server-minted UUIDv7, regardless of the id the client put in the CIR."""
+    app, sync, _ = _client_with_orcid_bearer()
+    cir = _fixture_paper("main")  # `rrxiv parse` default (tex file stem)
+    paper_id = _submit(sync, cir)
+    sync.close()
+    _assert_is_uuid7(paper_id)
+    assert paper_id != "main"
+    assert "main" not in app.state.store.state.papers
+    assert paper_id in app.state.store.state.papers
+
+
+def test_submit_echoing_existing_id_does_not_overwrite() -> None:
+    """RRP-0029 security: a non-revision submission that echoes an
+    existing paper's id must NOT overwrite it — the server mints a fresh
+    id and leaves the existing (e.g. seeded-corpus) paper untouched."""
+    from rrxiv.server.ids import uuid7
+
+    app, sync, _ = _client_with_orcid_bearer()
+
+    # A pre-existing paper in the corpus (as if seeded).
+    existing_id = str(uuid7())
+    existing = _fixture_paper(existing_id)
+    existing["title"] = "Seeded corpus paper — do not clobber"
+    app.state.store.add_paper(existing)
+
+    # A malicious/naive submission that echoes the existing paper's id.
+    attacker = _fixture_paper(existing_id)
+    attacker["title"] = "MALICIOUS OVERWRITE"
+    new_id = _submit(sync, attacker)
+    sync.close()
+
+    # The submission got its own freshly-minted id, distinct from the
+    # target it tried to echo.
+    _assert_is_uuid7(new_id)
+    assert new_id != existing_id
+    # The seeded paper survives with its original title.
+    survivor = app.state.store.state.papers[existing_id]
+    assert survivor["title"] == "Seeded corpus paper — do not clobber"
 
 
 def test_submit_persists_pdf_when_provided() -> None:
@@ -104,8 +178,9 @@ def test_submit_persists_pdf_when_provided() -> None:
         },
     )
     assert resp.status_code == 201, resp.text
+    paper_id = resp.json()["paper_id"]
 
-    pdf_resp = sync.get("/papers/p-pdf/pdf")
+    pdf_resp = sync.get(f"/papers/{paper_id}/pdf")
     sync.close()
     assert pdf_resp.status_code == 200, pdf_resp.text
     assert pdf_resp.content == pdf_bytes
@@ -132,12 +207,13 @@ def test_submit_rewrites_source_uri_to_server_relative() -> None:
     )
     sync.close()
     assert resp.status_code == 201, resp.text
+    paper_id = resp.json()["paper_id"]
 
-    stored = app.state.store.state.papers.get("p-srcuri")
+    stored = app.state.store.state.papers.get(paper_id)
     assert stored is not None
     source = stored.get("source")
     assert isinstance(source, dict)
-    assert source.get("uri", "").endswith("/papers/p-srcuri/source"), source
+    assert source.get("uri", "").endswith(f"/papers/{paper_id}/source"), source
     assert not source.get("uri", "").startswith("file://"), source
 
 
@@ -181,14 +257,8 @@ def test_paper_source_round_trip() -> None:
     _app, sync, _ = _client_with_orcid_bearer()
     cir = _fixture_paper("p-src")
     bundle_bytes = b"unique-bytes-for-source-test"
-    sync.post(
-        "/submissions",
-        files={
-            "cir": ("c.json", json.dumps(cir).encode("utf-8"), "application/json"),
-            "bundle": ("p.tar.gz", bundle_bytes, "application/gzip"),
-        },
-    )
-    resp = sync.get("/papers/p-src/source")
+    paper_id = _submit(sync, cir, bundle_bytes)
+    resp = sync.get(f"/papers/{paper_id}/source")
     sync.close()
     assert resp.status_code == 200
     assert resp.content == bundle_bytes
@@ -235,18 +305,12 @@ def test_paper_source_manifest_lists_files() -> None:
             "refs.bib": "@misc{x, title={x}}",
         }
     )
-    sync.post(
-        "/submissions",
-        files={
-            "cir": ("c.json", json.dumps(cir).encode("utf-8"), "application/json"),
-            "bundle": ("p.tar.gz", bundle, "application/gzip"),
-        },
-    )
-    resp = sync.get("/papers/p-manifest/source/manifest")
+    paper_id = _submit(sync, cir, bundle)
+    resp = sync.get(f"/papers/{paper_id}/source/manifest")
     sync.close()
     assert resp.status_code == 200
     body = resp.json()
-    assert body["paper_id"] == "p-manifest"
+    assert body["paper_id"] == paper_id
     paths = [f["path"] for f in body["files"]]
     # main.tex comes first by the sort key.
     assert paths[0] == "main.tex"
@@ -262,14 +326,8 @@ def test_paper_source_file_returns_utf8_text() -> None:
     cir = _fixture_paper("p-srcfile")
     main_tex = "\\section{Hello}\nworld\n"
     bundle = _tarball_with({"main.tex": main_tex})
-    sync.post(
-        "/submissions",
-        files={
-            "cir": ("c.json", json.dumps(cir).encode("utf-8"), "application/json"),
-            "bundle": ("p.tar.gz", bundle, "application/gzip"),
-        },
-    )
-    resp = sync.get("/papers/p-srcfile/source/file?path=main.tex")
+    paper_id = _submit(sync, cir, bundle)
+    resp = sync.get(f"/papers/{paper_id}/source/file?path=main.tex")
     sync.close()
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/plain")
@@ -290,15 +348,9 @@ def test_paper_source_file_resolves_under_bundle_root_and_serves_image() -> None
             "paper/figures/fig.png": png,
         }
     )
-    sync.post(
-        "/submissions",
-        files={
-            "cir": ("c.json", json.dumps(cir).encode("utf-8"), "application/json"),
-            "bundle": ("p.tar.gz", bundle, "application/gzip"),
-        },
-    )
+    paper_id = _submit(sync, cir, bundle)
     # request the figure by its source-root-relative path (no `paper/` prefix)
-    resp = sync.get("/papers/p-fig/source/file?path=figures/fig.png")
+    resp = sync.get(f"/papers/{paper_id}/source/file?path=figures/fig.png")
     sync.close()
     assert resp.status_code == 200, resp.text
     assert resp.headers["content-type"].startswith("image/png")
@@ -309,14 +361,8 @@ def test_paper_source_file_rejects_path_traversal() -> None:
     _, sync, _ = _client_with_orcid_bearer()
     cir = _fixture_paper("p-traversal")
     bundle = _tarball_with({"main.tex": "x"})
-    sync.post(
-        "/submissions",
-        files={
-            "cir": ("c.json", json.dumps(cir).encode("utf-8"), "application/json"),
-            "bundle": ("p.tar.gz", bundle, "application/gzip"),
-        },
-    )
-    resp = sync.get("/papers/p-traversal/source/file?path=../etc/passwd")
+    paper_id = _submit(sync, cir, bundle)
+    resp = sync.get(f"/papers/{paper_id}/source/file?path=../etc/passwd")
     sync.close()
     assert resp.status_code == 404
 
@@ -333,11 +379,17 @@ def test_paper_source_manifest_404_when_no_source() -> None:
 
 def test_paper_versions_walks_chain() -> None:
     _, sync, _ = _client_with_orcid_bearer()
-    for paper_id, prev in [("v1", None), ("v2", "v1"), ("v3", "v2")]:
-        cir = _fixture_paper(paper_id)
+    # The head (v1) is a new submission → server-minted id. Each revision
+    # points its previous_version at the id the server actually assigned.
+    ids: list[str] = []
+    prev: str | None = None
+    for label in ("r1", "r2", "r3"):
+        cir = _fixture_paper(label)
+        data: dict[str, str] = {}
         if prev:
             cir["previous_version"] = prev
-        sync.post(
+            data["previous_version"] = prev
+        resp = sync.post(
             "/submissions",
             files={
                 "cir": (
@@ -347,12 +399,17 @@ def test_paper_versions_walks_chain() -> None:
                 ),
                 "bundle": ("p.tar.gz", b"x", "application/gzip"),
             },
+            data=data,
         )
-    resp = sync.get("/papers/v3/versions")
+        assert resp.status_code == 201, resp.text
+        pid = resp.json()["paper_id"]
+        ids.append(pid)
+        prev = pid
+    resp = sync.get(f"/papers/{ids[-1]}/versions")
     sync.close()
     assert resp.status_code == 200
     items = resp.json()["items"]
-    assert [i["id"] for i in items] == ["v1", "v2", "v3"]
+    assert [i["id"] for i in items] == ids
 
 
 # ----- Search -----
@@ -360,25 +417,16 @@ def test_paper_versions_walks_chain() -> None:
 
 def test_search_papers_matches_title_and_abstract() -> None:
     _, sync, _ = _client_with_orcid_bearer()
+    minted: dict[str, str] = {}
     for pid, title in [("p1", "Alpha quantum"), ("p2", "Beta classical")]:
         cir = _fixture_paper(pid)
         cir["title"] = title
-        sync.post(
-            "/submissions",
-            files={
-                "cir": (
-                    "c.json",
-                    json.dumps(cir).encode("utf-8"),
-                    "application/json",
-                ),
-                "bundle": ("p.tar.gz", b"x", "application/gzip"),
-            },
-        )
+        minted[pid] = _submit(sync, cir)
     resp = sync.get("/search/papers", params={"q": "quantum"})
     sync.close()
     assert resp.status_code == 200
     ids = [p["id"] for p in resp.json()["items"]]
-    assert ids == ["p1"]
+    assert ids == [minted["p1"]]
 
 
 def test_search_papers_empty_query_returns_all(

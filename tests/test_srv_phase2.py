@@ -646,8 +646,10 @@ def test_submit_revision_attaches_diff_and_synthesises_summary() -> None:
     v1["claims"] = [_claim("p-rev-v1:c1", "p-rev-v1", statement="Original.")]
     resp = _submit(sync, v1, b"v1 bundle")
     assert resp.status_code == 201, resp.text
+    # v1 is a new submission → server-minted machine id (RRP-0029).
+    v1_id = resp.json()["paper_id"]
 
-    v2 = _paper("p-rev-v2", version="v2", previous_version="p-rev-v1", abstract="v2 abstract")
+    v2 = _paper("p-rev-v2", version="v2", previous_version=v1_id, abstract="v2 abstract")
     v2["claims"] = [
         _claim("p-rev-v2:c1", "p-rev-v2", statement="Revised statement.")
     ]
@@ -655,14 +657,15 @@ def test_submit_revision_attaches_diff_and_synthesises_summary() -> None:
         sync,
         v2,
         b"v2 bundle",
-        previous_version="p-rev-v1",
+        previous_version=v1_id,
         revision_summary="Revised claim 1 to use a sharper bound.",
     )
     sync.close()
     assert resp2.status_code == 201, resp2.text
     body = resp2.json()
+    v2_id = body["paper_id"]
     assert body["version"] == "v2"
-    assert body["previous_version"] == "p-rev-v1"
+    assert body["previous_version"] == v1_id
     assert body["revision_diff"] is not None
     assert body["revision_diff"]["abstract_changed"] is True
 
@@ -671,10 +674,10 @@ def test_submit_revision_attaches_diff_and_synthesises_summary() -> None:
         a
         for a in app.state.store.list_annotations()
         if a.get("annotation_type") == "revision_summary"
-        and a.get("target_id") == "p-rev-v2"
+        and a.get("target_id") == v2_id
     ]
     assert len(summaries) == 1
-    assert summaries[0]["structured_payload"]["previous_version_id"] == "p-rev-v1"
+    assert summaries[0]["structured_payload"]["previous_version_id"] == v1_id
 
 
 def test_submit_unknown_previous_version_is_400() -> None:
@@ -698,27 +701,29 @@ def test_submit_revision_with_same_cir_id_mints_fresh_paper_id() -> None:
     v1["claims"] = [_claim("collision-v1:c1", "collision-v1")]
     resp1 = _submit(sync, v1, b"v1 bundle")
     assert resp1.status_code == 201, resp1.text
+    v1_id = resp1.json()["paper_id"]  # server-minted machine id (RRP-0029)
 
-    # CIR for v2 carries the SAME id as v1 (a re-submit of the same
-    # paper repo where \rrxivid{} didn't change).
-    v2 = _paper("collision-v1", version="v2", previous_version="collision-v1")
-    v2["claims"] = [_claim("collision-v1:c1", "collision-v1", statement="Updated.")]
+    # CIR for v2 echoes v1's minted id AND targets it as previous_version
+    # (a re-submit of the same paper repo that carries the id the server
+    # just assigned). The server must mint a fresh id, not overwrite v1.
+    v2 = _paper(v1_id, version="v2", previous_version=v1_id)
+    v2["claims"] = [_claim(f"{v1_id}:c1", v1_id, statement="Updated.")]
     resp2 = _submit(
         sync,
         v2,
         b"v2 bundle",
-        previous_version="collision-v1",
+        previous_version=v1_id,
     )
     sync.close()
     assert resp2.status_code == 201, resp2.text
     body = resp2.json()
-    assert body["paper_id"] != "collision-v1", (
+    assert body["paper_id"] != v1_id, (
         "server must mint a fresh paper_id when CIR's id collides with "
         "previous_version, not overwrite v1 + create a self-loop"
     )
-    assert body["previous_version"] == "collision-v1"
+    assert body["previous_version"] == v1_id
     # Both rows must still exist in the store.
-    assert app.state.store.get_paper("collision-v1") is not None
+    assert app.state.store.get_paper(v1_id) is not None
     assert app.state.store.get_paper(body["paper_id"]) is not None
 
 
@@ -749,6 +754,7 @@ def test_submit_persists_claims_into_claims_table() -> None:
     ]
     resp = _submit(sync, paper, b"bundle")
     assert resp.status_code == 201, resp.text
+    paper_id = resp.json()["paper_id"]  # server-minted machine id (RRP-0029)
 
     # Store must now have the three claim rows individually, keyed off
     # the slug (not the machine id).
@@ -759,7 +765,7 @@ def test_submit_persists_claims_into_claims_table() -> None:
 
     # And the public read paths must surface them — resolvable via both
     # the machine id and the slug.
-    list_resp = sync.get("/papers/p-claims-persisted/claims")
+    list_resp = sync.get(f"/papers/{paper_id}/claims")
     list_resp_slug = sync.get(f"/papers/{slug}/claims")
     sync.close()
     assert list_resp.status_code == 200

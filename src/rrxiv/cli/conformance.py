@@ -118,12 +118,20 @@ def conformance(
             auth=AgentSigningAuth(signing),
         )
     _expect(resp, 201, "POST /submissions")
-    typer.secho("      OK (paper minted)", fg=typer.colors.GREEN)
+    # RRP-0029: the server mints the machine id for a new submission and
+    # ignores the client-supplied CIR id. Use the returned id for every
+    # subsequent lookup.
+    server_paper_id = resp.json()["paper_id"]
+    typer.secho(
+        f"      OK (paper minted as {server_paper_id})", fg=typer.colors.GREEN
+    )
 
     typer.echo("[3/9] paper visible in /papers…")
     with RrxivClient(api_base, auth=bearer, agent_signing_key=signing) as client:
         page = client.list_papers()
-        assert any(p["id"] == paper_id for p in page["items"]), "paper missing"
+        assert any(
+            p["id"] == server_paper_id for p in page["items"]
+        ), "paper missing"
     typer.secho("      OK", fg=typer.colors.GREEN)
 
     typer.echo("[4/9] /search/papers finds it…")
@@ -131,7 +139,9 @@ def conformance(
         resp = c.get(f"{api_base}/search/papers", params={"q": "conformance"})
     _expect(resp, 200, "GET /search/papers")
     ids = [p["id"] for p in resp.json()["items"]]
-    assert paper_id in ids, f"search did not return {paper_id}: ids={ids}"
+    assert server_paper_id in ids, (
+        f"search did not return {server_paper_id}: ids={ids}"
+    )
     typer.secho("      OK", fg=typer.colors.GREEN)
 
     ann_id = f"ann-conformance-{int(time.time())}"
@@ -140,7 +150,7 @@ def conformance(
         ann = client.create_annotation(
             {
                 "id": ann_id,
-                "target_id": paper_id,
+                "target_id": server_paper_id,
                 "target_type": "paper",
                 "annotation_type": "comment",
                 "content": "Conformance suite annotation.",
@@ -186,7 +196,7 @@ def conformance(
 
     with tarfile.open(fileobj=io.BytesIO(resp.content), mode="r:gz") as tar:
         names = tar.getnames()
-        assert f"papers/{paper_id}.json" in names
+        assert f"papers/{server_paper_id}.json" in names
         assert f"annotations/{ann_id}.json" in names
     typer.secho("      OK", fg=typer.colors.GREEN)
 
