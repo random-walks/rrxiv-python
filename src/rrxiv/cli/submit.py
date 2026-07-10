@@ -327,6 +327,24 @@ def _resolve_identity(
     return None
 
 
+def _web_view_url(server: str, slug: str) -> str:
+    """Build the human-facing paper-page URL from the API server URL.
+
+    The paper page lives on the WEB host, not the API host. On the
+    canonical instance the API is served from ``api.rrxiv.com/api/v0``
+    while the pages live on ``rrxiv.com`` — so
+    ``https://api.rrxiv.com/papers/<slug>`` 404s. Strip the ``/api/v0``
+    suffix and map the canonical API host to the web host. Non-canonical
+    hosts (dev, self-hosted) serve pages from the same origin, so only
+    the suffix is stripped.
+    """
+    base = server.replace("/api/v0", "").rstrip("/")
+    # Canonical prod: api.rrxiv.com → rrxiv.com. Anchored on ``://`` so we
+    # only rewrite the host, never a path segment.
+    base = base.replace("://api.rrxiv.com", "://rrxiv.com", 1)
+    return f"{base}/papers/{slug}"
+
+
 def _print_success(body: dict[str, Any], *, server: str, dry_run: bool) -> None:
     """Pretty-print the response for human consumption."""
     paper_id = body.get("paper_id")
@@ -352,10 +370,7 @@ def _print_success(body: dict[str, Any], *, server: str, dry_run: bool) -> None:
         typer.echo(f"  retrieval_uri:   {body['retrieval_uri']}")
     if not dry_run and paper_id:
         # Quick-link to the human-friendly page on the canonical instance.
-        canonical = (
-            slug
-            and server.replace("/api/v0", "").rstrip("/") + f"/papers/{slug}"
-        ) or None
+        canonical = (slug and _web_view_url(server, slug)) or None
         if canonical:
             typer.echo(f"  view:            {canonical}")
     if diff:

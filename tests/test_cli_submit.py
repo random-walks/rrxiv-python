@@ -307,3 +307,32 @@ def test_cli_submit_no_identity_returns_2(
     )
     assert code == 2
     assert "no stored identity" in out
+
+
+# ---------------------------------------------------------------------------
+# Post-submit "view:" link (web host, not API host)
+# ---------------------------------------------------------------------------
+
+
+def test_web_view_url_maps_api_host_to_web_host() -> None:
+    """The human ``view:`` link must point at the WEB host. The API is on
+    api.rrxiv.com/api/v0 but the paper page lives on rrxiv.com — building
+    it off the API host gives api.rrxiv.com/papers/<slug>, which 404s."""
+    from rrxiv.cli.submit import _web_view_url
+
+    # Canonical prod: api.rrxiv.com → rrxiv.com, /api/v0 stripped.
+    assert (
+        _web_view_url("https://api.rrxiv.com/api/v0", "rrxiv:2605.00001")
+        == "https://rrxiv.com/papers/rrxiv:2605.00001"
+    )
+    # Trailing slash tolerated.
+    assert (
+        _web_view_url("https://api.rrxiv.com/api/v0/", "rrxiv:2605.00002")
+        == "https://rrxiv.com/papers/rrxiv:2605.00002"
+    )
+    # Dev / self-hosted: pages served from the same origin — only the
+    # /api/v0 suffix is stripped, the host is left alone.
+    assert (
+        _web_view_url("http://127.0.0.1:8000/api/v0", "s")
+        == "http://127.0.0.1:8000/papers/s"
+    )

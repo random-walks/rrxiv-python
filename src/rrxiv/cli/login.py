@@ -223,6 +223,9 @@ def login_orcid(
         code=result.code,
         state=result.state,
         expected_state=auth_url.state,
+        # OAuth (RFC 6749 §4.1.3): the token exchange must send the SAME
+        # redirect_uri we authorized with, or ORCID 401s the exchange.
+        redirect_uri=redirect_uri,
     )
     _persist_bearer(api_base, bearer, expires_in_seconds=3600 * 24)
     _print_success(f"Logged in as ORCID {bearer.identity}")
@@ -232,6 +235,11 @@ def _login_orcid_paste(api_base: str) -> None:
     """Paste-fallback flow: print URL, prompt user to paste a code."""
     from rrxiv.auth import build_orcid_authorization_url
 
+    # We authorize with the server's /auth/orcid/render endpoint as the
+    # redirect_uri; ORCID redirects the browser there and the SERVER does
+    # the code→iD token exchange (it threads this same render URL as the
+    # redirect_uri per OAuth RFC 6749 §4.1.3). The CLI only redeems the
+    # short paste code below, so it sends no redirect_uri of its own.
     auth_url = build_orcid_authorization_url(
         api_base=api_base,
         redirect_uri=f"{api_base}/auth/orcid/render",

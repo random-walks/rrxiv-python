@@ -329,6 +329,103 @@ def test_orcid_callback_falls_back_to_env_redirect_uri(
     )
 
 
+def test_exchange_orcid_code_threads_loopback_redirect_uri(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Loopback flow (RFC 6749 §4.1.3): the redirect_uri the CLI
+    authorized with — ``http://127.0.0.1:<port>/callback`` — is threaded
+    through ``exchange_orcid_code`` into the ORCID token exchange, not
+    the server's env-var default. Without this, ORCID 401s the exchange.
+    """
+    from fastapi.testclient import TestClient
+
+    from rrxiv.auth import exchange_orcid_code
+
+    settings = ServerSettings(
+        dev_mode=False,
+        orcid_client_id="test-client",
+        orcid_client_secret="test-secret",
+        orcid_redirect_uri="https://env.invalid/should-not-be-used",
+    )
+    app = build_app(settings=settings)
+    transport = TestClient(app)._transport
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_post(url: str, *, data: Any = None, **kwargs: Any) -> Any:
+        captured.append({"url": url, "data": dict(data or {})})
+
+        class _Resp:
+            status_code = 200
+            text = ""
+
+            def json(self) -> dict[str, Any]:
+                return {"orcid": "0000-0002-1111-2222"}
+
+        return _Resp()
+
+    monkeypatch.setattr("httpx.post", fake_post)
+
+    loopback = "http://127.0.0.1:54321/callback"
+    bearer = exchange_orcid_code(
+        api_base="http://testserver/api/v0",
+        code="real-loopback-code",
+        state="s",
+        expected_state="s",
+        redirect_uri=loopback,
+        transport=transport,
+    )
+    assert bearer.identity == "0000-0002-1111-2222"
+    assert captured
+    # The value sent to ORCID's token endpoint matches the authorize step.
+    assert captured[0]["url"] == settings.orcid_token_url
+    assert captured[0]["data"]["redirect_uri"] == loopback
+
+
+def test_orcid_render_threads_its_own_url_as_redirect_uri(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Paste/render flow (RFC 6749 §4.1.3): ``/auth/orcid/render``
+    exchanges the code using its OWN URL as the redirect_uri — the value
+    the paste flow authorized with — not the server's env-var callback
+    default. Without this, ORCID 401s the exchange."""
+    settings = ServerSettings(
+        dev_mode=False,
+        orcid_client_id="test-client",
+        orcid_client_secret="test-secret",
+        orcid_redirect_uri="https://env.invalid/callback",
+    )
+    captured: list[dict[str, Any]] = []
+
+    def fake_post(url: str, *, data: Any = None, **kwargs: Any) -> Any:
+        captured.append({"url": url, "data": dict(data or {})})
+
+        class _Resp:
+            status_code = 200
+            text = ""
+
+            def json(self) -> dict[str, Any]:
+                return {"orcid": "0000-0003-4444-5555"}
+
+        return _Resp()
+
+    monkeypatch.setattr("httpx.post", fake_post)
+
+    _app, sync = _client(settings)
+    with sync as c:
+        resp = c.get(
+            "/auth/orcid/render",
+            params={"code": "real-render-code", "state": "s"},
+        )
+    assert resp.status_code == 200, resp.text
+    assert captured
+    # The render endpoint authorized with (and exchanges with) its own
+    # URL, minus the ORCID-appended ?code=…&state=… query.
+    assert captured[0]["data"]["redirect_uri"] == (
+        "http://testserver/api/v0/auth/orcid/render"
+    )
+
+
 # ----- Anonymous render -----
 
 

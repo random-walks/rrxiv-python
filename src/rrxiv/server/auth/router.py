@@ -192,7 +192,15 @@ def orcid_render(
     settings: ServerSettings = request.app.state.settings
     store: Store = request.app.state.store
 
-    orcid_id = _resolve_orcid_id_from_code(settings, code)
+    # The paste-back flow authorized with THIS endpoint's URL as the
+    # redirect_uri, so the token exchange must send the same value
+    # (OAuth RFC 6749 §4.1.3) — this URL minus the ORCID-appended
+    # ``?code=…&state=…`` query. Falling back to settings.orcid_redirect_uri
+    # (the callback URL) would 401 the exchange on the mismatch.
+    render_redirect_uri = str(request.url).split("?", 1)[0]
+    orcid_id = _resolve_orcid_id_from_code(
+        settings, code, redirect_uri=render_redirect_uri
+    )
 
     paste_code = _mint_paste_code()
     now = int(time.time())

@@ -95,6 +95,7 @@ def exchange_orcid_code(
     code: str,
     state: str,
     expected_state: str,
+    redirect_uri: str | None = None,
     transport: httpx.BaseTransport | None = None,
     timeout: float = 30.0,
 ) -> BearerToken:
@@ -107,6 +108,13 @@ def exchange_orcid_code(
         expected_state: the ``state`` value from
             :class:`OrcidAuthorizationUrl`. Mismatch raises
             :class:`ValueError`.
+        redirect_uri: the ``redirect_uri`` used in the authorize step.
+            OAuth (RFC 6749 §4.1.3) requires the token exchange to send
+            a byte-identical value, so the caller MUST pass the same URI
+            it authorized with (e.g. its loopback ``http://127.0.0.1:
+            <port>/callback``). When ``None``, the server falls back to
+            its ``RRXIV_ORCID_REDIRECT_URI`` env var — which only matches
+            for callers that authorized with that exact URI.
         transport: optional ``httpx.BaseTransport`` for tests.
         timeout: request timeout, seconds.
 
@@ -119,10 +127,13 @@ def exchange_orcid_code(
         raise ValueError("OAuth state mismatch — possible CSRF; rejecting code")
 
     base = api_base.rstrip("/")
+    payload: dict[str, str] = {"code": code, "state": state}
+    if redirect_uri is not None:
+        payload["redirect_uri"] = redirect_uri
     with httpx.Client(transport=transport, timeout=timeout) as client:
         resp = client.post(
             f"{base}/auth/orcid/callback",
-            json={"code": code, "state": state},
+            json=payload,
         )
     raise_for_status(resp)
     body = resp.json()
