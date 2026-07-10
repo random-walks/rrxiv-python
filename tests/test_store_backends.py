@@ -161,6 +161,70 @@ def test_clear_corpus_truncates_papers_and_blobs(store: Store) -> None:
     assert store.get_token("keep") == tok
 
 
+def test_replace_seed_papers_keeps_others_and_all_annotations(
+    store: Store,
+) -> None:
+    """``replace_seed_papers`` drops ONLY the given papers (+ their CIR /
+    claims / source / PDF), leaving every other paper and ALL annotations
+    intact — including annotations targeting a replaced seed paper."""
+    seed_slug = "rrxiv:2605.00050"
+    # A seed paper (slug-keyed claims), plus its source/PDF.
+    store.add_paper({"id": "seed-1", "id_slug": seed_slug, "title": "old"})
+    store.add_cir({"id": "seed-1", "id_slug": seed_slug, "claims": []})
+    store.add_claim(
+        {"id": f"{seed_slug}:c1", "paper_id": seed_slug, "statement": "stale"}
+    )
+    store.bump_claim_view(f"{seed_slug}:c1")
+    store.save_source("seed-1", b"seed source")
+    store.save_rendered_pdf("seed-1", b"%PDF seed")
+
+    # A community-submitted paper with its own claim + source — must survive.
+    store.add_paper({"id": "community-1", "id_slug": "rrxiv:2605.09999"})
+    store.add_claim(
+        {"id": "rrxiv:2605.09999:c1", "paper_id": "rrxiv:2605.09999", "statement": "keep"}
+    )
+    store.save_source("community-1", b"community source")
+
+    # Annotations on BOTH papers — none may be deleted.
+    for aid, target in [("ann-community", "community-1"), ("ann-seed", seed_slug)]:
+        store.add_annotation(
+            {
+                "id": aid,
+                "target_id": target,
+                "target_type": "paper",
+                "annotation_type": "comment",
+                "content": "x",
+                "created_at": "2026-05-20T00:00:00Z",
+                "created_by": {"identity_type": "anonymous", "identity": ""},
+            }
+        )
+
+    store.replace_seed_papers(["seed-1"])
+
+    # The seed paper + its derived rows are gone.
+    assert store.get_paper("seed-1") is None
+    assert store.get_cir("seed-1") is None
+    assert store.load_source("seed-1") is None
+    assert store.load_rendered_pdf("seed-1") is None
+    assert store.get_claim(f"{seed_slug}:c1") is None
+    assert store.get_claim_views(f"{seed_slug}:c1") == 0
+
+    # The community paper + its claim + source survive.
+    assert store.get_paper("community-1") is not None
+    assert store.get_claim("rrxiv:2605.09999:c1") is not None
+    assert store.load_source("community-1") == b"community source"
+
+    # ALL annotations survive — including the one on the replaced seed paper.
+    assert {a["id"] for a in store.list_annotations()} == {"ann-community", "ann-seed"}
+
+
+def test_replace_seed_papers_ignores_unknown_ids(store: Store) -> None:
+    """Unknown ids are a no-op; existing corpus is untouched."""
+    store.add_paper({"id": "p1", "title": "keep"})
+    store.replace_seed_papers(["does-not-exist"])
+    assert store.get_paper("p1") is not None
+
+
 def test_snapshot_blob_round_trip(store: Store) -> None:
     blob = b"snapshot tarball"
     uri = store.save_snapshot_blob("snap1", blob)

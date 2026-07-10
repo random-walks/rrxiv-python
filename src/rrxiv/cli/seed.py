@@ -97,6 +97,28 @@ def _iter_cir_files(root: Path) -> list[Path]:
     return found
 
 
+def _seed_paper_id(cir_path: Path) -> str | None:
+    """Resolve the paper ``id`` a CIR file will be stored under, WITHOUT
+    mutating the store — used to target :meth:`Store.replace_seed_papers`
+    before reseeding under ``--preserve-community``.
+
+    Mirrors the id resolution in :func:`load_cir_into_store`: a
+    ``rrxiv-meta.json`` (paper-repo layout with no built CIR) falls back
+    to ``id_slug`` and then the repo directory name; a ``*.cir.json``
+    uses its ``id`` field.
+    """
+    try:
+        with cir_path.open("r", encoding="utf-8") as f:
+            cir = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if cir_path.name == "rrxiv-meta.json":
+        pid = cir.get("id") or cir.get("id_slug") or cir_path.parent.name
+        return str(pid) if pid else None
+    pid = cir.get("id")
+    return str(pid) if pid else None
+
+
 def _is_paper_repo_root(path: Path) -> bool:
     """True when ``path`` looks like a rrxiv-paper-template-shaped repo root."""
     return (path / "paper" / "main.tex").is_file() and (path / "rrxiv-meta.json").is_file()
@@ -241,7 +263,21 @@ def seed_store_cmd(
                 "Truncate every paper/CIR/claim/annotation/source/PDF "
                 "row before re-seeding. Use when claim ids or paper ids "
                 "have changed between releases so the store doesn't keep "
-                "orphans alongside the new canonical records."
+                "orphans alongside the new canonical records. Dev-only — "
+                "it also wipes community submissions and annotations."
+            ),
+        ),
+    ] = False,
+    preserve_community: Annotated[
+        bool,
+        typer.Option(
+            "--preserve-community",
+            help=(
+                "Refresh ONLY the seed papers in --from, leaving every "
+                "other (externally submitted) paper and ALL annotations "
+                "intact. Use this to reseed the canonical corpus on a "
+                "LIVE instance without destroying community data. "
+                "Mutually exclusive with --reset."
             ),
         ),
     ] = False,
@@ -249,6 +285,16 @@ def seed_store_cmd(
     """Bulk-load CIRs into a Store, bypassing /submissions."""
     if not from_.is_dir():
         typer.secho(f"ERROR: --from path is not a directory: {from_}", fg="red", err=True)
+        raise typer.Exit(code=2)
+
+    if reset and preserve_community:
+        typer.secho(
+            "ERROR: --reset and --preserve-community are mutually exclusive "
+            "(--reset wipes everything; --preserve-community keeps community "
+            "papers + annotations).",
+            fg="red",
+            err=True,
+        )
         raise typer.Exit(code=2)
 
     store = store_from_url(store_url)
@@ -262,6 +308,22 @@ def seed_store_cmd(
             )
 
     cir_files = _iter_cir_files(from_)
+
+    if preserve_community and cir_files:
+        # Replace ONLY the incoming seed papers (delete-then-insert), so a
+        # reseed of a live instance doesn't strand stale claims but leaves
+        # every externally submitted paper and ALL annotations untouched.
+        seed_ids = [
+            pid for p in cir_files if (pid := _seed_paper_id(p)) is not None
+        ]
+        store.replace_seed_papers(seed_ids)
+        if not quiet:
+            typer.secho(
+                f"Preserving community data: replaced only {len(seed_ids)} "
+                "seed paper(s); other papers + all annotations kept.",
+                fg="yellow",
+            )
+
     if not cir_files:
         typer.secho(
             f"WARNING: no *.cir.json files found in {from_}",

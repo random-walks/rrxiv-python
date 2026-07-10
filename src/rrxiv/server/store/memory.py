@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from rrxiv.server.store.protocol import (
@@ -203,3 +204,25 @@ class MemoryStore:
         # Sprint 22: drop view counts too so the leaderboard doesn't
         # surface dead claim ids after a corpus reset.
         self.state.claim_views.clear()
+
+    def replace_seed_papers(self, paper_ids: Iterable[str]) -> None:
+        for pid in paper_ids:
+            paper = self.state.papers.get(pid)
+            # Claims key off the paper's citable id_slug (RRP-0013/0029),
+            # not the machine id; fall back to the id for slug-less rows.
+            owner_keys = {pid}
+            if paper is not None and paper.get("id_slug"):
+                owner_keys.add(paper["id_slug"])
+            stale_claim_ids = [
+                cid
+                for cid, claim in self.state.claims.items()
+                if claim.get("paper_id") in owner_keys
+            ]
+            for cid in stale_claim_ids:
+                self.state.claims.pop(cid, None)
+                self.state.claim_views.pop(cid, None)
+            self.state.papers.pop(pid, None)
+            self.state.cirs.pop(pid, None)
+            self.state.sources.pop(pid, None)
+            self.state.rendered_pdfs.pop(pid, None)
+            # Annotations are deliberately left untouched.

@@ -168,6 +168,140 @@ def test_seed_reset_wipes_existing_corpus(tmp_path: Path) -> None:
     store.close()
 
 
+def test_seed_preserve_community_keeps_other_papers_and_annotations(
+    tmp_path: Path,
+) -> None:
+    """``--preserve-community`` refreshes ONLY the incoming seed papers,
+    leaving externally submitted papers AND all annotations intact —
+    unlike ``--reset``, which truncates everything."""
+    db = tmp_path / "rrxiv.db"
+    seed_slug = "rrxiv:2605.00050"
+
+    # Pre-populate: an OLD version of the seed paper (with a stale claim),
+    # a community-submitted paper, and annotations on BOTH papers.
+    store = store_from_url(f"sqlite:///{db}")
+    store.add_paper({"id": "seed-1", "id_slug": seed_slug, "title": "old title"})
+    store.add_cir({"id": "seed-1", "id_slug": seed_slug, "claims": []})
+    store.add_claim(
+        {
+            "id": f"{seed_slug}:claim:stale",
+            "paper_id": seed_slug,
+            "statement": "stale claim",
+            "claim_type": "theoretical",
+            "evidence_type": "argument",
+            "replication_status": "untested",
+            "depends_on": [],
+            "supports": [],
+            "contradicts": [],
+            "extends": [],
+        }
+    )
+    store.add_paper(
+        {"id": "community-1", "id_slug": "rrxiv:2605.09999", "title": "community"}
+    )
+    for aid, target in [("ann-community", "community-1"), ("ann-seed", seed_slug)]:
+        store.add_annotation(
+            {
+                "id": aid,
+                "target_id": target,
+                "target_type": "paper",
+                "annotation_type": "comment",
+                "content": "x",
+                "created_at": "2026-05-20T00:00:00Z",
+                "created_by": {"identity_type": "orcid", "identity": "0000-0001"},
+            }
+        )
+    store.close()
+
+    # New seed dir: UPDATED seed-1 (new title + a fresh claim, no stale one).
+    seed_dir = tmp_path / "seed"
+    seed_dir.mkdir()
+    updated = {
+        "rrxiv_version": "0.1.0",
+        "id": "seed-1",
+        "id_slug": seed_slug,
+        "version": "v1",
+        "title": "new title",
+        "authors": [{"name": "X"}],
+        "abstract": "abstract",
+        "submitted_at": "2026-05-21T00:00:00Z",
+        "license": "CC-BY-4.0",
+        "source": {"format": "latex", "uri": None},
+        "claims": [
+            {
+                "id": f"{seed_slug}:claim:fresh",
+                "paper_id": seed_slug,
+                "statement": "fresh claim",
+                "claim_type": "theoretical",
+                "evidence_type": "argument",
+                "replication_status": "untested",
+                "depends_on": [],
+                "supports": [],
+                "contradicts": [],
+                "extends": [],
+            }
+        ],
+        "annotations": [],
+        "citations": [],
+        "sections": [],
+        "figures": [],
+    }
+    (seed_dir / "seed-1.cir.json").write_text(json.dumps(updated), encoding="utf-8")
+
+    result = CliRunner().invoke(
+        seed_app,
+        [
+            "--from",
+            str(seed_dir),
+            "--store",
+            f"sqlite:///{db}",
+            "--quiet",
+            "--preserve-community",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+
+    store = store_from_url(f"sqlite:///{db}")
+    papers = {p["id"]: p for p in store.list_papers()}
+    # The externally submitted paper survives.
+    assert "community-1" in papers
+    # The seed paper is updated in place.
+    assert papers["seed-1"]["title"] == "new title"
+    # Stale claim gone; the fresh claim from the new CIR is present.
+    claim_ids = {c["id"] for c in store.list_claims()}
+    assert f"{seed_slug}:claim:stale" not in claim_ids
+    assert f"{seed_slug}:claim:fresh" in claim_ids
+    # ALL annotations intact — on BOTH the community and the seed paper.
+    assert {a["id"] for a in store.list_annotations()} == {
+        "ann-community",
+        "ann-seed",
+    }
+    store.close()
+
+
+def test_seed_reset_and_preserve_community_are_mutually_exclusive(
+    tmp_path: Path,
+) -> None:
+    """The two reseed modes conflict — passing both is an error."""
+    seed_dir = tmp_path / "seed"
+    seed_dir.mkdir()
+    _write_cir(seed_dir, "01923f8e-0009-7c4d-9e1f-3a2b1c0d4e5f")
+
+    result = CliRunner().invoke(
+        seed_app,
+        [
+            "--from",
+            str(seed_dir),
+            "--store",
+            "memory://",
+            "--reset",
+            "--preserve-community",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.output
+
+
 # ---------- Slug-keyed claim resolution (RRP-0013 / RRP-0029) -----------
 
 
