@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from collections.abc import Iterable
 from dataclasses import asdict
 from typing import Any
 
@@ -605,6 +606,50 @@ class SqliteStore:
                 "claim_views",
             ):
                 self._conn.execute(f"DELETE FROM {table}")
+            self._conn.commit()
+
+    def replace_seed_papers(self, paper_ids: Iterable[str]) -> None:
+        """Delete only the given papers (+ their CIR/claims/source/PDF/view
+        counters), leaving all other papers and ALL annotations intact.
+        Used by ``seed-store --preserve-community``."""
+        ids = list(paper_ids)
+        if not ids:
+            return
+        with self._lock:
+            for pid in ids:
+                # Claims key off the paper's citable id_slug (RRP-0013/0029),
+                # not the machine id; resolve it from the stored record.
+                owner_keys = {pid}
+                row = self._conn.execute(
+                    "SELECT payload FROM papers WHERE id = ?", (pid,)
+                ).fetchone()
+                if row is not None:
+                    slug = json.loads(row[0]).get("id_slug")
+                    if slug:
+                        owner_keys.add(slug)
+                # Drop this paper's claims (+ their view counts). Claims are
+                # a JSON blob per row, so filter in Python — the corpus is
+                # small and this runs only at reseed time.
+                claim_rows = self._conn.execute(
+                    "SELECT id, payload FROM claims"
+                ).fetchall()
+                for cid, payload in claim_rows:
+                    if json.loads(payload).get("paper_id") in owner_keys:
+                        self._conn.execute(
+                            "DELETE FROM claims WHERE id = ?", (cid,)
+                        )
+                        self._conn.execute(
+                            "DELETE FROM claim_views WHERE claim_id = ?", (cid,)
+                        )
+                self._conn.execute("DELETE FROM papers WHERE id = ?", (pid,))
+                self._conn.execute("DELETE FROM cirs WHERE id = ?", (pid,))
+                self._conn.execute(
+                    "DELETE FROM sources WHERE paper_id = ?", (pid,)
+                )
+                self._conn.execute(
+                    "DELETE FROM rendered_pdfs WHERE paper_id = ?", (pid,)
+                )
+                # Annotations are deliberately left untouched.
             self._conn.commit()
 
 

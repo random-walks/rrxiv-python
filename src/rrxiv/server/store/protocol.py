@@ -7,6 +7,7 @@ without changing route code.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
@@ -226,6 +227,22 @@ class Store(Protocol):
     Does NOT touch tokens, agents, challenges, snapshots, or rate
     limiting state — those are operational/auth concerns separate
     from the read corpus.
+    """
+
+    def replace_seed_papers(self, paper_ids: Iterable[str]) -> None: ...
+    """Delete ONLY the given papers and their derived rows — CIR, claims,
+    source archive, rendered PDF, and those claims' view counters — so a
+    reseed can re-insert them, while leaving every OTHER paper and ALL
+    annotations intact.
+
+    Used by ``rrxiv seed-store --preserve-community`` to refresh the
+    canonical corpus on a live instance WITHOUT wiping externally
+    submitted papers or any community annotations — unlike
+    :meth:`clear_corpus`, which truncates everything. A paper's claims
+    are matched by the owning paper's ``id_slug`` (RRP-0013 / RRP-0029),
+    resolved from the stored paper record before deletion; annotations
+    are never deleted, even those targeting a replaced seed paper.
+    Unknown ids are ignored.
     """
 
 
