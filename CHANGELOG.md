@@ -2,7 +2,12 @@
 
 All notable changes to `rrxiv-python` are recorded here. The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) once it ships its first stable release. While in pre-1.0, breaking changes can land at any minor version.
 
-## [Unreleased]
+## [0.1.0] — unreleased
+
+First public release. Everything below ships in 0.1.0 (the package was
+developed under `[Unreleased]` and had never been published to PyPI, so
+all of it — the initial scaffolding through the productionization
+sprint — lands together in the first tagged release).
 
 ### Added
 
@@ -74,10 +79,21 @@ All notable changes to `rrxiv-python` are recorded here. The format is loosely b
 
 ### Fixed
 
+#### Productionization sprint (July 2026)
+
+- **Server-side paper-id minting (security)** ([RRP-0029](https://github.com/random-walks/rrxiv/blob/main/proposals/0029-paper-id-uuidv7.md)). `POST /api/v0/submissions` now always mints the UUIDv7 `paper.id` server-side for new (non-revision) submissions and ignores any client-supplied CIR `id`. Previously a submitter could silently overwrite **any** existing paper — including the seeded corpus — by echoing its id, because both stores upsert without an existence check and `rrxiv parse` always emits an id (the tex file stem, e.g. `main`). Revisions still legitimately target an existing id via `previous_version`.
+- **ORCID login `redirect_uri` threading** (OAuth [RFC 6749 §4.1.3](https://datatracker.ietf.org/doc/html/rfc6749#section-4.1.3)). The CLI loopback and paste flows now thread the `redirect_uri` they authorized with all the way into the ORCID token exchange — `exchange_orcid_code` gained a `redirect_uri` param, and `/auth/orcid/render` exchanges the code with its own URL — instead of falling back to the server's `RRXIV_ORCID_REDIRECT_URI`. Fixes the 401 that mismatch caused against production.
+- **`rrxiv submit` view link** now points at the web host (`rrxiv.com/papers/<slug>`), not the API host (`api.rrxiv.com`), which 404'd. Client-side host mapping only; no server change.
+- **`rrxiv seed-store --preserve-community`** — new opt-in flag (mutually exclusive with `--reset`) to reseed the canonical corpus on a live instance while leaving every externally submitted paper and **all** annotations intact. Replaces only the incoming seed papers via the new `Store.replace_seed_papers` (sqlite + memory). `--reset` keeps its full-clear behaviour for dev use.
+
+#### Parser / schema
+
 - DOI regex in `citation.schema.json` now allows lowercase letters (real-world DOIs are mixed case).
 - Citation field URL strips a wrapping `\url{...}` macro so it passes pydantic `AnyUrl` validation.
 
-## [0.1.0] — initial scaffolding
+### Initial scaffolding
+
+The starting point 0.1.0 was built on:
 
 - Pydantic v2 models generated from the rrxiv JSON Schemas (paper, claim, annotation, citation, cir).
 - TeX parser v0: regex-based walker, sidecar reader, build_cir() producing a validated CIR.
