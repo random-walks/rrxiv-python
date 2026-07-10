@@ -1,34 +1,79 @@
 name: release
 
-# Publish to PyPI when a GitHub Release is *published* (NOT on tag push).
-# The maintainer creates the Release manually; this job then builds the
-# sdist + wheel with `uv build` and uploads them via PyPI Trusted
-# Publishing (OIDC) — so there is no PyPI API token stored in the repo.
+# Hands-off PyPI releases: publish whenever the version in pyproject.toml
+# reaches a value that has no matching git tag yet. To cut a release you
+# only bump `version` in pyproject.toml (in a normal PR) and merge — this
+# job then builds, publishes to PyPI via Trusted Publishing (OIDC, no
+# token), tags the commit, and creates the GitHub Release. No manual
+# release step, no stored secrets.
 #
-# One-time setup (maintainer, external to this repo):
-#   1. Configure a PyPI Trusted Publisher for project "rrxiv" pointing at
-#      owner `random-walks`, repo `rrxiv-python`, workflow `release.yml`.
-#   2. Create a GitHub Release tagged `v0.1.0` → this workflow publishes.
+# Guard: every push to main runs this, but it exits early (cheap) unless
+# the current version has no `v<version>` tag. Re-running after a
+# successful publish is a no-op because the tag now exists.
+#
+# One-time maintainer setup (external to this repo):
+#   PyPI Trusted Publisher for project "rrxiv" → owner random-walks,
+#   repo rrxiv-python, workflow release.yml, environment (blank).
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  pypi-publish:
-    name: Build + publish to PyPI (Trusted Publishing)
+  release:
+    name: Publish to PyPI on version bump
     runs-on: ubuntu-latest
     permissions:
-      # Required for PyPI Trusted Publishing: lets the job mint a
-      # short-lived OIDC token PyPI trades for an upload token.
-      id-token: write
+      id-token: write   # PyPI Trusted Publishing (OIDC)
+      contents: write   # push the tag + create the GitHub Release
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need existing tags for the guard
+
+      - name: Resolve version + tag
+        id: v
+        run: |
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          if git rev-parse "refs/tags/v$version" >/dev/null 2>&1; then
+            echo "already released v$version — nothing to do"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "v$version has no tag — will release"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: astral-sh/setup-uv@v3
+        if: steps.v.outputs.release == 'true'
         with:
           python-version: "3.11"
+
       - name: Build sdist + wheel
-        run: uv build
-      - name: Publish to PyPI
-        # No username/password/token: the action uses the OIDC token
-        # above for Trusted Publishing. Reads distributions from dist/.
+        if: steps.v.outputs.release == 'true'
+        run: |
+          rm -rf dist
+          uv build
+
+      # Publish BEFORE tagging: if the upload fails, no tag is written, so
+      # a fixed re-run can retry the same version. PyPI only consumes a
+      # version on a successful upload.
+      - name: Publish to PyPI (Trusted Publishing)
+        if: steps.v.outputs.release == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Tag + GitHub Release
+        if: steps.v.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag "${{ steps.v.outputs.tag }}"
+          git push origin "${{ steps.v.outputs.tag }}"
+          gh release create "${{ steps.v.outputs.tag }}" dist/* \
+            --title "${{ steps.v.outputs.tag }}" \
+            --notes "Automated release of rrxiv ${{ steps.v.outputs.version }} on PyPI. See CHANGELOG.md for details."
