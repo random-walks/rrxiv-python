@@ -347,6 +347,129 @@ def _claim_ids_from_edge(
     return edge.source, edge.target
 
 
+# ---------------------------------------------------------------------------
+# RRP-0030: claim authoring keys — the `claim` environment's optional
+# argument may be a key=value list mapping onto claim.schema fields.
+
+_CLAIM_TYPES = frozenset(
+    {"empirical", "theoretical", "definitional", "methodological", "computational"}
+)
+_EVIDENCE_TYPES = frozenset(
+    {"proof", "experiment", "simulation", "observation", "argument", "definition", "convention"}
+)
+_SCOPE_KEYS = ("models", "datasets", "regimes", "assumptions")
+_LIST_KEYS = frozenset({"labels", *_SCOPE_KEYS})
+_FLOAT_KEYS = frozenset({"confidence", "confidence-low", "confidence-high"})
+_KNOWN_CLAIM_KEYS = frozenset(
+    {"title", "type", "evidence", "rationale"} | _LIST_KEYS | _FLOAT_KEYS
+)
+
+
+class ClaimKeyError(ValueError):
+    """Invalid RRP-0030 key=value list on a `claim` environment.
+
+    Raised loudly (fails the parse) so a typo'd ``type=emprical`` cannot
+    silently publish as the ``theoretical`` default.
+    """
+
+
+def _split_depth0(raw: str) -> list[str]:
+    """Split on commas at brace depth 0 (`{...}` protects commas)."""
+    parts: list[str] = []
+    depth = 0
+    cur: list[str] = []
+    for ch in raw:
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth = max(0, depth - 1)
+        if ch == "," and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    parts.append("".join(cur))
+    return parts
+
+
+def _strip_braces(value: str) -> str:
+    v = value.strip()
+    if v.startswith("{") and v.endswith("}"):
+        return v[1:-1].strip()
+    return v
+
+
+def _parse_claim_keys(raw: str | None) -> dict[str, Any] | None:
+    """Parse a claim env's optional argument as RRP-0030 key=value pairs.
+
+    Returns ``None`` when the argument is absent or a plain title — i.e.
+    contains no ``=`` at brace depth 0 (the backwards-compatible path).
+    Raises :class:`ClaimKeyError` on unknown keys or invalid values.
+    """
+    if not raw:
+        return None
+    depth = 0
+    has_eq = False
+    for ch in raw:
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth = max(0, depth - 1)
+        elif ch == "=" and depth == 0:
+            has_eq = True
+            break
+    if not has_eq:
+        return None
+
+    out: dict[str, Any] = {}
+    for part in _split_depth0(raw):
+        part = part.strip()
+        if not part:
+            continue
+        key, eq, value = part.partition("=")
+        key = key.strip()
+        if not eq:
+            raise ClaimKeyError(
+                f"claim key entry {part!r} is not key=value (RRP-0030)"
+            )
+        if key not in _KNOWN_CLAIM_KEYS:
+            raise ClaimKeyError(
+                f"unknown claim key {key!r}; RRP-0030 keys are "
+                f"{sorted(_KNOWN_CLAIM_KEYS)}"
+            )
+        value = _strip_braces(value)
+        if key in _FLOAT_KEYS:
+            try:
+                num = float(value)
+            except ValueError as exc:
+                raise ClaimKeyError(
+                    f"claim key {key}={value!r} is not a number"
+                ) from exc
+            if not 0.0 <= num <= 1.0:
+                raise ClaimKeyError(
+                    f"claim key {key}={num} outside [0, 1]"
+                )
+            out[key] = num
+        elif key in _LIST_KEYS:
+            out[key] = [item.strip() for item in _split_depth0(value) if item.strip()]
+        else:
+            out[key] = value
+
+    claim_type = out.get("type")
+    if claim_type is not None and claim_type not in _CLAIM_TYPES:
+        raise ClaimKeyError(
+            f"type={claim_type!r} is not a claim_type; expected one of "
+            f"{sorted(_CLAIM_TYPES)}"
+        )
+    evidence_type = out.get("evidence")
+    if evidence_type is not None and evidence_type not in _EVIDENCE_TYPES:
+        raise ClaimKeyError(
+            f"evidence={evidence_type!r} is not an evidence_type; expected "
+            f"one of {sorted(_EVIDENCE_TYPES)}"
+        )
+    return out
+
+
 def _build_claims(
     tex: TexDocument,
     sidecar: Sidecar,
@@ -366,6 +489,7 @@ def _build_claims(
     # ids; this is what unlocks the knowledge-graph DAG for multi-
     # prefix corpora like Euclid (claims ``prop:*`` depending on
     # scopes ``post:*`` / ``def:*`` / ``cn:*``).
+    # (RRP-0030 claim-key parsing helpers live just above this builder.)
     label_resolver = _build_label_resolver(tex.environments, paper_id)
 
     # Group edges by resolved source id for fast lookup.
@@ -379,6 +503,20 @@ def _build_claims(
     claims: list[dict[str, Any]] = []
     claim_envs = [e for e in tex.environments if e.name == "claim"]
     for env in claim_envs:
+        # RRP-0030: the claim env's optional arg may be a key=value list.
+        # pylatexenc drops an optional arg that contains braces (e.g.
+        # ``labels={a, b}``) — it lands INLINE at the top of env.body,
+        # same quirk the foundational-claims path handles for
+        # ``rrxivremark``. Pull the bracket prefix off the body so it
+        # parses as the optional arg and never leaks into the statement.
+        raw_opt = env.title
+        claim_body = env.body.strip()
+        if raw_opt is None:
+            bracket = re.match(r"^\[([^\[\]\n]+)\]\s*", claim_body)
+            if bracket:
+                raw_opt = bracket.group(1)
+                claim_body = claim_body[bracket.end() :]
+        keys = _parse_claim_keys(raw_opt)
         marker = pairs.get(env)
         index = marker.index if marker else f"{len(claims) + 1}"
         cid = _claim_id(paper_id, env, index)
@@ -402,7 +540,7 @@ def _build_claims(
             elif edge.edge_type == "extends":
                 extends.append(target)
 
-        statement = env.body.strip()
+        statement = claim_body
         # Strip out the \label{...} call so the statement is just the body.
         if env.label:
             statement = statement.replace(f"\\label{{{env.label}}}", "").strip()
@@ -414,11 +552,30 @@ def _build_claims(
             "id": cid,
             "paper_id": paper_id,
             "statement": statement,
-            "claim_type": "theoretical",  # v0.1 default; spec/0003 will refine
-            "evidence_type": "argument",  # v0.1 default
+            # RRP-0030: explicit type=/evidence= keys win; otherwise the
+            # v0.1 defaults stand (spec/0003 will refine inference).
+            "claim_type": (keys or {}).get("type", "theoretical"),
+            "evidence_type": (keys or {}).get("evidence", "argument"),
             "extracted_by": "author",
             "canonical": True,
         }
+        if keys:
+            confidence: dict[str, Any] = {}
+            if "confidence" in keys:
+                confidence["point"] = keys["confidence"]
+            if "confidence-low" in keys:
+                confidence["lower"] = keys["confidence-low"]
+            if "confidence-high" in keys:
+                confidence["upper"] = keys["confidence-high"]
+            if "rationale" in keys:
+                confidence["rationale"] = keys["rationale"]
+            if confidence:
+                claim["confidence"] = confidence
+            if keys.get("labels"):
+                claim["labels"] = keys["labels"]
+            scope = {k: keys[k] for k in _SCOPE_KEYS if keys.get(k)}
+            if scope:
+                claim["scope"] = scope
         if depends_on:
             claim["depends_on"] = depends_on
         if supports:
