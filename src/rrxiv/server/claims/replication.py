@@ -68,14 +68,30 @@ def quorum_for_claim(claim_id: str, store: Store) -> int:
 
     Uses the parent paper's ``topics`` field; falls back to
     ``_DEFAULT_QUORUM`` when topics are absent or unrecognised.
+
+    Topics are matched both exactly and by their leading dotted segment,
+    so arXiv-style categories inherit their family's quorum: ``math.HO``
+    → ``math`` (quorum 1), ``econ.GN`` → ``econ``. RRP-0019's "the
+    claim's discipline tags come from the paper's topics; the
+    most-specific tag determines the quorum" — exact table entries (e.g.
+    ``physics.experimental``, ``cs.nlp``) are checked before the family
+    collapse, and bare families absent from the table (e.g. ``cs``)
+    still fall through to the default. Found live: Euclid's
+    ``math.HO/MG/NT`` matched nothing, silently taking quorum 3 instead
+    of math's 1, so single-replication math claims derived ``partial``.
     """
     paper_id = _paper_id_of_claim(claim_id)
     paper = store.get_paper(paper_id)
-    topics = set((paper.get("topics") if paper else None) or [])
+    raw = (paper.get("topics") if paper else None) or []
     # Lowercase normalisation so "ML" matches "ml".
-    topics = {t.lower() for t in topics}
+    topics = {t.lower() for t in raw}
+    # arXiv-style family collapse: math.HO → math.
+    families = {t.split(".", 1)[0] for t in topics if "." in t}
     for tags, q in _QUORUM_TABLE:
         if topics & tags:
+            return q
+    for tags, q in _QUORUM_TABLE:
+        if families & tags:
             return q
     return _DEFAULT_QUORUM
 

@@ -10,7 +10,7 @@ info:
 
     Request/response schemas are inlined under `components/schemas`. Conforming servers MUST validate
     payloads against the canonical JSON Schemas in `rrxiv/schema/`.'
-  version: 0.2.2
+  version: 0.2.3
   license:
     name: MIT (code), CC-BY-4.0 (spec)
 paths:
