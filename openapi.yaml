@@ -832,9 +832,15 @@ paths:
       description: 'List erratum annotations for this paper, newest first.
 
 
-        Convenience over filtering /annotations by target + type. Paginated
+        Returns every ``erratum`` annotation targeting the paper itself or
 
-        via cursor.'
+        any of its claims (RRP-0017). Errata whose structured payload sets
+
+        ``retracted: true`` are the ones that drive the paper''s derived
+
+        retraction status. Convenience over filtering ``/annotations`` by
+
+        target + type. Paginated via ``cursor``/``limit``.'
       operationId: list_errata_api_v0_papers__paper_id__errata_get
       parameters:
       - name: paper_id
