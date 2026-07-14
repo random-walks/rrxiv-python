@@ -3,8 +3,8 @@
 Synced from: /Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv-python/../rrxiv/schema
 Source repo: /Users/blaise/Desktop/blaise-oss/rrxiv-dev-workspace/repos/rrxiv
 Branch:      main
-Commit:      7b0d5b2dd48e41f217c29f9fe79aaaddfe773e56
-Synced at:   2026-05-30T22:01:19Z
+Commit:      b061717306608b6f263a33bb016fbd3d51b48b79
+Synced at:   2026-07-14T17:34:31Z
 
 Files:
   - agent_provenance.schema.json
