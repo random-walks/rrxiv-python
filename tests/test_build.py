@@ -251,6 +251,96 @@ def test_author_and_separator_splits_into_multiple_entries(tmp_path: Path) -> No
     assert names == ["Alice", "Bob", "Carol (agent)"], names
 
 
+def test_edge_macros_in_claim_body_stripped_but_edges_survive(
+    tmp_path: Path,
+) -> None:
+    """Edge macros inlined inside a ``claim`` env body must not leak into
+    ``claim.statement`` — while the depends_on/supports/extends edges
+    still populate from the sidecar, independent of the body text.
+
+    Regression for two coupled bugs:
+
+    1. ``_EDGE_MACRO_RE`` matched a non-existent bare ``\\extends`` rather
+       than the real cls macro ``\\extendsclaim``, so ``\\extendsclaim``
+       was never stripped anywhere.
+    2. Only the proof path stripped edge macros; the statement path
+       (``tex_to_text`` via ``_build_claims``) did not, so an author who
+       wrote ``\\dependson``/``\\supports``/``\\extendsclaim`` inside the
+       claim body leaked the raw macro into the CIR statement. This was
+       live on ``GET /papers/rrxiv:2605.00001/claims`` (the queryability
+       claim's statement ended with a raw ``\\dependson{...}``).
+
+    The edges themselves come from the ``.rrxiv.aux`` sidecar, not from
+    the body macros — so we point the body macros at *sentinel* targets
+    that must NOT appear in the edge lists, and the sidecar at the real
+    targets that must.
+    """
+    tex = tmp_path / "p.tex"
+    sidecar = tmp_path / "p.rrxiv.aux"
+    tex.write_text(
+        r"\documentclass{rrxiv}"
+        "\n"
+        r"\rrxivid{test-edges}"
+        "\n"
+        r"\title{T}"
+        "\n"
+        r"\author{A. Tester}"
+        "\n"
+        r"\begin{document}"
+        "\n"
+        r"\begin{abstract}A.\end{abstract}"
+        "\n"
+        r"\begin{claim}[The main result]"
+        "\n"
+        r"\label{prop:main}"
+        "\n"
+        r"A queryable claim graph over preprints is achievable."
+        "\n"
+        r"\dependson{prop:main}{sentinel-body-dep}"
+        "\n"
+        r"\supports{prop:main}{sentinel-body-sup}"
+        "\n"
+        r"\extendsclaim{prop:main}{sentinel-body-ext}"
+        "\n"
+        r"\end{claim}"
+        "\n"
+        r"\end{document}"
+        "\n"
+    )
+    sidecar.write_text(
+        "RRXIV:meta:id:test-edges\n"
+        "RRXIV:meta:version:v1\n"
+        "RRXIV:meta:protocol:0.1.0\n"
+        "RRXIV:meta:license:CC-BY-4.0\n"
+        "RRXIV:claim:1\n"
+        "RRXIV:edge:depends_on:test-edges:prop:main|test-edges:real-dep\n"
+        "RRXIV:edge:supports:test-edges:prop:main|test-edges:real-sup\n"
+        "RRXIV:edge:extends:test-edges:prop:main|test-edges:real-ext\n"
+    )
+    cir = build_cir(tex)
+    assert cir.claims is not None
+    claim = cir.claims[0]
+
+    # Statement is clean prose — no raw edge macros, no sentinel targets.
+    assert claim.statement == "A queryable claim graph over preprints is achievable."
+    for token in (
+        "dependson",
+        "supports",
+        "extendsclaim",
+        "contradicts",
+        "sentinel-body-dep",
+        "sentinel-body-sup",
+        "sentinel-body-ext",
+    ):
+        assert token not in claim.statement
+
+    # Edges are extracted from the sidecar, independent of the body text:
+    # the real targets are present; the body sentinels never leak in.
+    assert claim.depends_on == ["test-edges:real-dep"]
+    assert claim.supports == ["test-edges:real-sup"]
+    assert claim.extends == ["test-edges:real-ext"]
+
+
 def test_author_duplicate_within_paper_dedup(tmp_path: Path) -> None:
     """If the .tex repeats ``\\author{Same}``, the second is dropped."""
     tex = tmp_path / "p.tex"

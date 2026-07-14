@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from rrxiv.parser.clean import tex_to_text
+from rrxiv.parser.clean import _EDGE_MACRO_RE, tex_to_text
 
 
 class TestStyleMacros:
@@ -157,6 +157,48 @@ class TestDropMacros:
         # Sanity: text with no \thanks is unaffected.
         out = tex_to_text(r"Plain author name")
         assert out == "Plain author name"
+
+
+class TestEdgeMacros:
+    """Edge-declaration macros (\\dependson / \\supports / \\contradicts /
+    \\extendsclaim) must be stripped from every CIR prose field.
+
+    Their graph structure already rides on the Claim's edge arrays
+    (extracted from the sidecar), so an author inlining one inside a
+    claim environment body must not leak the raw macro into the
+    statement. Regression coverage for two bugs:
+
+    - ``_EDGE_MACRO_RE`` matched a bare ``\\extends`` that no cls macro
+      emits; the real macro is ``\\extendsclaim`` (two args), so
+      ``\\extendsclaim{a}{b}`` was silently never stripped.
+    - Only the proof path (``tex_to_proof_text``) stripped edge macros;
+      the statement path (``tex_to_text``) did not, so inlined edge
+      macros leaked into ``claim.statement``.
+    """
+
+    def test_edge_macro_re_strips_extendsclaim(self) -> None:
+        # The exact macro rrxiv.cls emits — previously survived because
+        # the pattern only knew about a (non-existent) bare `\extends`.
+        assert _EDGE_MACRO_RE.sub("", r"\extendsclaim{a}{b}") == ""
+
+    def test_edge_macro_re_strips_all_four_kinds(self) -> None:
+        for macro in (
+            r"\dependson{a}{b}",
+            r"\supports{a}{b}",
+            r"\contradicts{a}{b}",
+            r"\extendsclaim{a}{b}",
+        ):
+            assert _EDGE_MACRO_RE.sub("", macro) == "", macro
+
+    def test_tex_to_text_strips_edge_macros_from_statement(self) -> None:
+        out = tex_to_text(
+            r"A claim graph is queryable. "
+            r"\dependson{prop:main}{x} \supports{prop:main}{y} "
+            r"\extendsclaim{prop:main}{z}"
+        )
+        assert out == "A claim graph is queryable."
+        for token in ("dependson", "supports", "extendsclaim", "contradicts"):
+            assert token not in out
 
 
 class TestPreservation:
