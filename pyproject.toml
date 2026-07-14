@@ -1,6 +1,6 @@
 [project]
 name = "rrxiv"
-version = "0.2.0"
+version = "0.2.1"
 description = "Reference Python client for the rrxiv protocol."
 readme = "README.md"
 license = { text = "MIT" }
@@ -13,6 +13,13 @@ dependencies = [
     "pylatexenc>=2.10",
     "bibtexparser>=1.4",
     "jsonschema>=4.20",
+    # Core since 0.2.1: the CLI (login/submit/annotation signing per
+    # RRP-0007/0024) imports these eagerly, so a bare `pip install rrxiv`
+    # was broken without the extras. The `agent`/`cli` extras remain as
+    # no-op aliases for compatibility.
+    "cryptography>=48.0.1",
+    "http-message-signatures>=2.0,<3",
+    "keyring>=25",
 ]
 
 [project.optional-dependencies]

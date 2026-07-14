@@ -2,6 +2,22 @@
 
 All notable changes to `rrxiv-python` are recorded here. The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) once it ships its first stable release. While in pre-1.0, breaking changes can land at any minor version.
 
+## [0.2.1] — 2026-07-14
+
+### Fixed
+
+- **Bare `pip install rrxiv` gives a working CLI.** 0.2.0's CLI died at
+  import on a base install: `rrxiv.cli.app` eagerly reaches request-signing
+  (`http-message-signatures`/`cryptography`, formerly the `agent` extra) and
+  the `seed` subcommand eagerly reached FastAPI via `rrxiv.server`'s package
+  init. Fixes: the signing deps + `keyring` are now **core dependencies**
+  (the `agent`/`cli` extras remain as compatible aliases), and
+  `rrxiv.server`'s package init lazy-loads `build_app`/`ServerSettings`
+  (PEP 562) so the stdlib-only store/slug submodules import without the
+  `[server]` extra. Verified on a clean venv: parse/validate/login/submit/
+  seed-store all work from the wheel alone; only `rrxiv serve` still needs
+  `pip install 'rrxiv[server]'`.
+
 ## [0.2.0] — 2026-07-14
 
 The 2026-07 corpus-enrichment release: RRP-0030 claim authoring keys in the
