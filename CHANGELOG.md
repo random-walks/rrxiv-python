@@ -2,6 +2,20 @@
 
 All notable changes to `rrxiv-python` are recorded here. The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) once it ships its first stable release. While in pre-1.0, breaking changes can land at any minor version.
 
+## [0.2.3] — 2026-07-14
+
+### Fixed
+
+- **arXiv-style dotted topics inherit their family's replication quorum**
+  (RRP-0019). `quorum_for_claim` matched paper topics against the quorum
+  table exactly, so `math.HO`/`math.MG`/`math.NT` (Euclid) matched nothing
+  and silently took the default quorum 3 — a single valid fresh replication
+  derived `partial` instead of `replicated`. Topics now match exactly first
+  (dotted table entries like `physics.experimental`/`cs.nlp` keep
+  precedence), then by leading family segment (`math.HO` → `math`,
+  `econ.GN` → `econ`); families absent from the table (bare `cs`) still
+  fall through to the default.
+
 ## [0.2.2] — 2026-07-14
 
 ### Fixed

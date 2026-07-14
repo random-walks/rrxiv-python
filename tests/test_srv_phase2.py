@@ -591,6 +591,66 @@ def test_quorum_per_discipline() -> None:
     assert quorum_for_claim("p-x:c1", store) == 3
 
 
+def test_quorum_dotted_arxiv_topics_inherit_family() -> None:
+    """arXiv-style dotted categories take their family's quorum.
+
+    Live regression: Euclid (math.HO/MG/NT) matched no table entry and
+    silently took the default quorum 3, so a single valid replication
+    derived `partial` instead of `replicated`.
+    """
+    store = MemoryStore()
+    store.add_paper(
+        {"id": "p-euclid", "topics": ["math.HO", "math.MG", "math.NT"]}
+    )
+    assert quorum_for_claim("p-euclid:c1", store) == 1
+    # Exact dotted table entries still win over the family collapse.
+    store.add_paper({"id": "p-exp", "topics": ["physics.experimental"]})
+    assert quorum_for_claim("p-exp:c1", store) == 3
+    # A family that isn't in the table (bare `cs`) still falls through.
+    store.add_paper({"id": "p-cs", "topics": ["cs.databases"]})
+    assert quorum_for_claim("p-cs:c1", store) == 3
+    # econ.GN → econ family (quorum 5).
+    store.add_paper({"id": "p-econ", "topics": ["econ.GN"]})
+    assert quorum_for_claim("p-econ:c1", store) == 5
+
+
+def test_derive_replicated_with_dotted_math_topics() -> None:
+    """End-to-end: one fresh_replication supports on a math.HO paper
+    reaches quorum; an artifacts-only reproduction stays partial."""
+    store = MemoryStore()
+    store.add_paper({"id": "p-e", "topics": ["math.HO"]})
+    store.add_annotation(
+        {
+            "id": "a1",
+            "target_id": "p-e:c1",
+            "target_type": "claim",
+            "annotation_type": "replication",
+            "content": "verified",
+            "structured_payload": {
+                "outcome": "supports",
+                "reproduction_kind": "fresh_replication",
+            },
+            "created_by": {"identity_type": "orcid", "identity": "0-0-0-0"},
+        }
+    )
+    assert derive_replication_status("p-e:c1", store) == "replicated"
+    store.add_annotation(
+        {
+            "id": "a2",
+            "target_id": "p-e:c2",
+            "target_type": "claim",
+            "annotation_type": "replication",
+            "content": "re-ran artifacts",
+            "structured_payload": {
+                "outcome": "supports",
+                "reproduction_kind": "reproduction_from_artifacts",
+            },
+            "created_by": {"identity_type": "orcid", "identity": "0-0-0-0"},
+        }
+    )
+    assert derive_replication_status("p-e:c2", store) == "partial"
+
+
 # ---------------------------------------------------------------------------
 # Submission router updates (RRP-0016 + RRP-0017)
 # ---------------------------------------------------------------------------
