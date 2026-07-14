@@ -161,6 +161,40 @@ def test_keyed_claim_carries_fields(rrp0030_cir: CIR) -> None:
     assert c2.statement.startswith("Keyed claim")
 
 
+def test_linewrapped_key_list_is_parsed(tmp_path: Path) -> None:
+    """A line-wrapped optional arg must not leak into the statement."""
+    wrapped = _TEX.replace(
+        f"[{_KEYED_OPT}]",
+        "[type=empirical, evidence=experiment,\n"
+        "  labels={negative-result, small-n},\n"
+        "  title=Keyed claim]",
+    )
+    tex = tmp_path / "paper.tex"
+    tex.write_text(wrapped, encoding="utf-8")
+    (tmp_path / "paper.rrxiv.aux").write_text(_SIDECAR, encoding="utf-8")
+    cir = build_cir(tex)
+    c2 = next(c for c in cir.claims if c.id.endswith("claim:c2"))
+    assert c2.claim_type.value == "empirical"
+    assert c2.labels == ["negative-result", "small-n"]
+    assert "type=" not in c2.statement
+    assert c2.statement.startswith("Keyed claim")
+
+
+def test_prose_bracket_prefix_stays_in_statement(tmp_path: Path) -> None:
+    """A leading citation bracket like [1] is prose, not a key list."""
+    prose = _TEX.replace(
+        f"[{_KEYED_OPT}]\n\\label{{claim:c2}}\nKeyed claim carries explicit epistemology.",
+        "\n\\label{claim:c2}\n[1] establishes the bound we assume here.",
+    )
+    tex = tmp_path / "paper.tex"
+    tex.write_text(prose, encoding="utf-8")
+    (tmp_path / "paper.rrxiv.aux").write_text(_SIDECAR, encoding="utf-8")
+    cir = build_cir(tex)
+    c2 = next(c for c in cir.claims if c.id.endswith("claim:c2"))
+    assert c2.claim_type.value == "theoretical"
+    assert c2.statement.startswith("[1] establishes")
+
+
 def test_invalid_key_fails_build(tmp_path: Path) -> None:
     tex = tmp_path / "paper.tex"
     tex.write_text(

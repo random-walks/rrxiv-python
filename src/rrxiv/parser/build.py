@@ -507,16 +507,22 @@ def _build_claims(
         # pylatexenc drops an optional arg that contains braces (e.g.
         # ``labels={a, b}``) — it lands INLINE at the top of env.body,
         # same quirk the foundational-claims path handles for
-        # ``rrxivremark``. Pull the bracket prefix off the body so it
-        # parses as the optional arg and never leaks into the statement.
-        raw_opt = env.title
+        # ``rrxivremark``. Pull the bracket prefix off the body when it
+        # parses as a key list so it never leaks into the statement. The
+        # regex spans newlines (key lists get line-wrapped in real
+        # papers); a bracket prefix that is NOT a key list — e.g. a
+        # ``[1]`` citation opening the prose — stays in the statement.
+        keys = _parse_claim_keys(env.title)
         claim_body = env.body.strip()
-        if raw_opt is None:
-            bracket = re.match(r"^\[([^\[\]\n]+)\]\s*", claim_body)
+        if env.title is None:
+            bracket = re.match(r"^\[([^\[\]]+)\]\s*", claim_body)
             if bracket:
-                raw_opt = bracket.group(1)
-                claim_body = claim_body[bracket.end() :]
-        keys = _parse_claim_keys(raw_opt)
+                inline_keys = _parse_claim_keys(
+                    " ".join(bracket.group(1).split())
+                )
+                if inline_keys is not None:
+                    keys = inline_keys
+                    claim_body = claim_body[bracket.end() :]
         marker = pairs.get(env)
         index = marker.index if marker else f"{len(claims) + 1}"
         cid = _claim_id(paper_id, env, index)
