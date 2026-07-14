@@ -57,17 +57,48 @@ _DEFAULT_QUORUM = 3
 
 
 def _paper_id_of_claim(claim_id: str) -> str:
-    """Extract the owning paper_id from a claim_id (``<paper>:<local>``)."""
-    if ":" in claim_id:
-        return claim_id.split(":", 1)[0]
+    """Extract the owning paper_id from a claim_id.
+
+    Claim ids are ``<paper_id>:<local_label>`` — but per RRP-0029 the
+    paper id is usually a *slug* that itself contains a colon
+    (``rrxiv:2605.00009:prop:I.47`` → owner ``rrxiv:2605.00009``).
+    Splitting on the first colon returned the literal string ``rrxiv``
+    for every slug-keyed claim, so the paper (and its topics/quorum)
+    was never found. Prefer the two-segment prefix when it is a valid
+    slug; otherwise fall back to the first segment (UUID-keyed claims).
+    """
+    from rrxiv.server.papers.slug import is_slug
+
+    parts = claim_id.split(":")
+    if len(parts) >= 3:
+        candidate = ":".join(parts[:2])
+        if is_slug(candidate):
+            return candidate
+    if len(parts) >= 2:
+        return parts[0]
     return claim_id
 
 
-def quorum_for_claim(claim_id: str, store: Store) -> int:
+def _resolve_owner_paper(store: Store, paper_id: str) -> dict[str, Any] | None:
+    """Fetch the owning paper by PK or, for slugs, by head-of-lineage
+    slug lookup (``store.get_paper`` is PK-keyed; ``claim.paper_id`` is
+    the id_slug per RRP-0029)."""
+    from rrxiv.server.papers.slug import find_paper_by_slug, is_slug
+
+    if is_slug(paper_id):
+        return find_paper_by_slug(store, paper_id)
+    return store.get_paper(paper_id)
+
+
+def quorum_for_claim(
+    claim_id: str, store: Store, *, paper_id: str | None = None
+) -> int:
     """Look up the per-discipline replication quorum for a claim.
 
     Uses the parent paper's ``topics`` field; falls back to
-    ``_DEFAULT_QUORUM`` when topics are absent or unrecognised.
+    ``_DEFAULT_QUORUM`` when topics are absent or unrecognised. Pass
+    ``paper_id`` (the claim record's own field) when available — it
+    skips the string-parsing heuristic on the claim id.
 
     Topics are matched both exactly and by their leading dotted segment,
     so arXiv-style categories inherit their family's quorum: ``math.HO``
@@ -80,8 +111,8 @@ def quorum_for_claim(claim_id: str, store: Store) -> int:
     ``math.HO/MG/NT`` matched nothing, silently taking quorum 3 instead
     of math's 1, so single-replication math claims derived ``partial``.
     """
-    paper_id = _paper_id_of_claim(claim_id)
-    paper = store.get_paper(paper_id)
+    owner = paper_id or _paper_id_of_claim(claim_id)
+    paper = _resolve_owner_paper(store, owner)
     raw = (paper.get("topics") if paper else None) or []
     # Lowercase normalisation so "ML" matches "ml".
     topics = {t.lower() for t in raw}
@@ -150,6 +181,7 @@ def derive_replication_status(
     store: Store,
     *,
     authored_default: str | None = None,
+    paper_id: str | None = None,
 ) -> str:
     """Compute the server-derived ``replication_status`` for a claim.
 
@@ -205,7 +237,7 @@ def derive_replication_status(
     if contradicts > 0 and contradicts >= supports:
         return "contradicted"
 
-    quorum = quorum_for_claim(claim_id, store)
+    quorum = quorum_for_claim(claim_id, store, paper_id=paper_id)
     if independent_supports >= quorum:
         return "replicated"
 
@@ -225,6 +257,9 @@ def apply_derived_status(claim: dict[str, Any], store: Store) -> dict[str, Any]:
     cid = claim.get("id")
     if cid:
         out["replication_status"] = derive_replication_status(
-            cid, store, authored_default=claim.get("replication_status")
+            cid,
+            store,
+            authored_default=claim.get("replication_status"),
+            paper_id=claim.get("paper_id"),
         )
     return out
