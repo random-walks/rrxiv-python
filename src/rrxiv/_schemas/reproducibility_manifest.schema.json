@@ -3,10 +3,14 @@
   "$id": "https://rrxiv.com/schema/v0/reproducibility_manifest.schema.json",
   "title": "ReproducibilityManifest",
   "description": "A small JSON file co-located with a paper's or replicator's code, describing the runtime environment and how to reproduce a claim. Linked from `replication` annotations via `reproducibility_manifest_uri` and from author-attached claim fields via `claim.reproducibility.manifest_uri`. See RRP-0019 for design rationale.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "object",
   "required": ["version", "claim_uri", "environment", "entrypoint"],
   "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional self-identifying reference to this manifest schema (e.g. `https://rrxiv.com/schema/reproducibility_manifest.schema.json`), as shown in RRP-0019's manifest example. Accepted but not required; kept a plain string (no `format`) so authors who copy the RRP example verbatim validate. Under the root's `additionalProperties: false` this is the only unknown-looking key that is allowed through."
+    },
     "version": {
       "type": "string",
       "const": "1.0",
