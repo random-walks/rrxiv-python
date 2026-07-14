@@ -153,13 +153,20 @@ def _strip_special_macros(text: str) -> str:
 
 # Edge-declaration macros from rrxiv.cls. Their info already lives on the
 # Claim's depends_on / supports / contradicts / extends edges (extracted
-# from the sidecar), so re-emitting them in a rendered proof body would
-# be redundant noise. Stripping them is a tex_to_proof_text-specific
-# step (we keep them in the generic tex_to_text path because abstracts
-# and titles do not contain edge macros in practice and we don't want to
-# expand tex_to_text's responsibility).
+# from the sidecar), so re-emitting them in any CIR prose field would be
+# redundant noise. They are never legitimate prose in a statement,
+# title, or abstract, so tex_to_text strips them for *every* builder;
+# tex_to_proof_text repeats the strip (harmless / idempotent) for the
+# comment- and \input-aware proof path.
+#
+# The class macro is ``\extendsclaim{S}{T}`` (two args) — NOT ``\extends``.
+# ``extendsclaim`` must appear in the alternation (and before a bare
+# ``extends`` so the longer name wins the match); an ``\extends``-only
+# pattern silently never strips ``\extendsclaim`` because the chars after
+# "extends" are "claim", not whitespace/brace.
 _EDGE_MACRO_RE = re.compile(
-    r"\\(?:dependson|supports|contradicts|extends)\s*\{[^{}]*\}\s*\{[^{}]*\}"
+    r"\\(?:dependson|supports|contradicts|extendsclaim|extends)"
+    r"\s*\{[^{}]*\}\s*\{[^{}]*\}"
 )
 # \input{...} / \include{...} references — the parser captures these
 # separately into the Claim's `figures` array, so they're stripped from
@@ -218,6 +225,15 @@ def tex_to_text(text: str) -> str:
     >>> assert tex_to_text(r"\\\\textit{Hello}") == r"\\Hello".replace("\\\\", "")  # doctest: +SKIP
     """
     text = _replace_escaped_specials(text)
+    # Strip edge-declaration macros (\dependson, \supports, \contradicts,
+    # \extendsclaim). Their graph structure already lives on the Claim's
+    # edge arrays (extracted from the sidecar, independent of body text),
+    # so when an author inlines one inside a claim environment body it
+    # must NOT leak into the CIR statement. Done here so every statement
+    # builder (_build_claims, _build_foundational_claims) is covered by a
+    # single site; edge macros are never legitimate prose in titles or
+    # abstracts either, so this is safe for all tex_to_text callers.
+    text = _EDGE_MACRO_RE.sub("", text)
     # Alternate drop + strip until both stabilise. Required for nested
     # cases like ``\thanks{\texttt{x}}`` where the inner ``\texttt`` has
     # braces of its own — strip resolves the inner argument first, then
