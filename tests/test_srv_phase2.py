@@ -614,6 +614,51 @@ def test_quorum_dotted_arxiv_topics_inherit_family() -> None:
     assert quorum_for_claim("p-econ:c1", store) == 5
 
 
+def test_derive_replicated_for_slug_keyed_claims() -> None:
+    """Prod-shape regression: RRP-0029 slug-keyed claim ids contain a
+    colon, so the old first-colon split resolved the owning paper as
+    the literal string ``rrxiv`` — the paper (and its quorum topics)
+    was never found and Euclid's fresh replication derived `partial`
+    even after the dotted-topic fix. Mirror prod exactly: paper stored
+    under its UUID PK with an id_slug, claim keyed off the slug,
+    derivation through the real read path (apply_derived_status)."""
+    from rrxiv.server.claims.replication import apply_derived_status
+
+    store = MemoryStore()
+    store.add_paper(
+        {
+            "id": "019e7ac0-814a-7000-8000-000000000001",
+            "id_slug": "rrxiv:2605.00009",
+            "topics": ["math.HO", "math.MG", "math.NT"],
+        }
+    )
+    claim = {
+        "id": "rrxiv:2605.00009:prop:I.47",
+        "paper_id": "rrxiv:2605.00009",
+        "statement": "the square on the hypotenuse…",
+        "replication_status": "untested",
+    }
+    store.add_annotation(
+        {
+            "id": "a-i47",
+            "target_id": "rrxiv:2605.00009:prop:I.47",
+            "target_type": "claim",
+            "annotation_type": "replication",
+            "content": "cross-checked in three provers",
+            "structured_payload": {
+                "outcome": "supports",
+                "reproduction_kind": "fresh_replication",
+            },
+            "created_by": {"identity_type": "orcid", "identity": "0-0-0-0"},
+        }
+    )
+    derived = apply_derived_status(claim, store)
+    assert derived["replication_status"] == "replicated"
+    # Bare string path (no paper_id field) also resolves via the
+    # two-segment slug prefix.
+    assert quorum_for_claim("rrxiv:2605.00009:prop:I.47", store) == 1
+
+
 def test_derive_replicated_with_dotted_math_topics() -> None:
     """End-to-end: one fresh_replication supports on a math.HO paper
     reaches quorum; an artifacts-only reproduction stays partial."""

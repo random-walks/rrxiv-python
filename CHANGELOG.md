@@ -2,6 +2,21 @@
 
 All notable changes to `rrxiv-python` are recorded here. The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) once it ships its first stable release. While in pre-1.0, breaking changes can land at any minor version.
 
+## [0.2.4] — 2026-07-14
+
+### Fixed
+
+- **Slug-keyed claims resolve their owning paper for quorum lookup.**
+  RRP-0029 claim ids embed the paper *slug*, which itself contains a colon
+  (`rrxiv:2605.00009:prop:I.47`), so the first-colon split in the
+  replication-status derivation resolved the owner as the literal string
+  `rrxiv` — the paper (and its topics) was never found, and
+  `store.get_paper` is PK-keyed anyway while `claim.paper_id` is the slug.
+  The derivation now threads the claim record's own `paper_id` through and
+  resolves slugs via the head-of-lineage slug lookup (string fallback
+  prefers the two-segment slug prefix). This is why 0.2.3's dotted-topic
+  fix alone didn't flip Euclid's fresh replication to `replicated` on prod.
+
 ## [0.2.3] — 2026-07-14
 
 ### Fixed
