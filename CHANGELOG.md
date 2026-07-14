@@ -2,6 +2,20 @@
 
 All notable changes to `rrxiv-python` are recorded here. The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) once it ships its first stable release. While in pre-1.0, breaking changes can land at any minor version.
 
+## [0.2.2] — 2026-07-14
+
+### Fixed
+
+- **`rrxiv.__version__` is single-sourced from package metadata.** The
+  hardcoded literal in `rrxiv/__init__.py` stayed at `0.1.0` through the
+  0.2.x releases, so prod's `GET /api/v0/version` reported
+  `rrxiv-python-server/0.1.0`, the Sentry release/`rrxiv_version` tags were
+  wrong, and FastAPI's `info.version` misreported. Now derived via
+  `importlib.metadata.version("rrxiv")` (fallback `0.0.0.dev0` on a bare
+  source tree); `tests/test_version.py` asserts lockstep with
+  `pyproject.toml` and that the version endpoint serves it, so the drift
+  cannot recur.
+
 ## [0.2.1] — 2026-07-14
 
 ### Fixed

@@ -1,6 +1,6 @@
 [project]
 name = "rrxiv"
-version = "0.2.1"
+version = "0.2.2"
 description = "Reference Python client for the rrxiv protocol."
 readme = "README.md"
 license = { text = "MIT" }
