@@ -260,7 +260,6 @@ def compute_revision_diff(
             "hunks": _word_diff_hunks(prev_cir.abstract or "", curr_cir.abstract or "")
         }
 
-    prev_topics = list(curr_cir.topics or [])  # placeholder; recomputed below
     prev_topics = list(prev_cir.topics or [])
     curr_topics = list(curr_cir.topics or [])
     topics_added = sorted(set(curr_topics) - set(prev_topics))

@@ -360,8 +360,11 @@ def list_errata(
 ) -> dict[str, Any]:
     """List erratum annotations for this paper, newest first.
 
-    Convenience over filtering /annotations by target + type. Paginated
-    via cursor.
+    Returns every ``erratum`` annotation targeting the paper itself or
+    any of its claims (RRP-0017). Errata whose structured payload sets
+    ``retracted: true`` are the ones that drive the paper's derived
+    retraction status. Convenience over filtering ``/annotations`` by
+    target + type. Paginated via ``cursor``/``limit``.
     """
     store: Store = get_store(request)
     paper = _resolve_paper(store, paper_id)

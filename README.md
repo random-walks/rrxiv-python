@@ -42,6 +42,15 @@ rrxiv validate paper.cir.json
 
 Produces a [Canonical Intermediate Representation](https://github.com/random-walks/rrxiv/blob/main/schema/cir.schema.json) — paper metadata + claims + annotations + claim-graph edges, validated against the JSON Schema in `random-walks/rrxiv`.
 
+### Diff two CIRs locally
+
+```bash
+rrxiv diff before.cir.json after.cir.json            # human-readable summary
+rrxiv diff before.cir.json after.cir.json -f json    # structured output
+```
+
+Semantic diff between two CIR documents: added/removed/changed claims, edge and citation deltas, annotation deltas, and top-level field changes (environment-specific fields like `submitted_at` are ignored). Useful for checking what a revision actually changes **before** submitting it. This is purely local — distinct from the server-side `RevisionDiff` that an instance computes when you submit a revision with `rrxiv submit --revision-of <prior_paper_id>` (or query `GET /papers/{id}/diff?from=<prior>`).
+
 ### Run a local instance
 
 ```bash
@@ -84,7 +93,7 @@ rrxiv seed-store --from ./seed --store sqlite:////data/rrxiv.db --preserve-commu
 - `rrxiv.server` — FastAPI app factory + 8 routers (auth, papers, claims, annotations, snapshots, search, submissions, sources). Pluggable `Store` (memory / sqlite / future Postgres).
 - `rrxiv.testing` — `live_server` pytest fixture for running the server against real HTTP.
 - `rrxiv.cli` — Typer CLI:
-  - **Authoring**: `parse`, `validate`, `submit`, `snapshot`, `doctor`.
+  - **Authoring**: `parse`, `validate`, `diff`, `submit`, `snapshot`, `doctor`.
   - **Auth**: `login` (ORCID / agent / anonymous flows, keychain persistence).
   - **Ops**: `serve`, `seed-store`.
   - **Read**: `version`, `papers {list,get,versions}`, `claims {list,get,top}`, `search` — added in Sprint 19 so the CLI is a first-class read client, not write-only.
