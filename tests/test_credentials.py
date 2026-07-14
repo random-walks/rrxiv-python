@@ -158,3 +158,40 @@ def test_corrupted_file_treated_as_empty(tmp_cred_dir: Path) -> None:
     cred_file.write_text("not valid json {{{")
     # Loading should not blow up; just return None.
     assert load_bearer("any", "orcid") is None
+
+
+def test_keyring_index_entries_redact_secrets() -> None:
+    """The keyring-backend metadata index must never carry secrets."""
+    from rrxiv.cli.credentials import (
+        StoredAgentKey,
+        StoredBearer,
+        _index_set_agent_key,
+        _index_set_bearer,
+    )
+
+    d: dict = {}
+    _index_set_bearer(
+        d,
+        StoredBearer(
+            api_base="https://api.example.com/api/v0",
+            identity_type="orcid",
+            identity="0000-0000-0000-0000",
+            token="SECRET-TOKEN",
+            issued_at_unix=0,
+            expires_at_unix=1,
+        ),
+    )
+    entry = d["credentials"]["https://api.example.com/api/v0"]["orcid"]
+    assert entry["token"] == "<in-keyring>"
+    assert entry["identity"] == "0000-0000-0000-0000"
+
+    _index_set_agent_key(
+        d,
+        StoredAgentKey(
+            api_base="https://api.example.com/api/v0",
+            handle="@bot",
+            private_key_b64="U0VDUkVU",
+        ),
+    )
+    key_entry = d["credentials"]["https://api.example.com/api/v0"]["agent_keys"]["@bot"]
+    assert key_entry["private_key_b64"] == "<in-keyring>"

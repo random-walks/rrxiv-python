@@ -2,7 +2,30 @@
 
 All notable changes to `rrxiv-python` are recorded here. The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [SemVer](https://semver.org/spec/v2.0.0.html) once it ships its first stable release. While in pre-1.0, breaking changes can land at any minor version.
 
-## [0.1.0] — unreleased
+## [0.2.0] — 2026-07-14
+
+The 2026-07 corpus-enrichment release: RRP-0030 claim authoring keys in the
+parser, statement-hygiene fixes, and an agent-drivable ORCID login. This is
+the version the published paper repos' tooling targets (`pip install
+'rrxiv>=0.2'`).
+
+### Added
+
+- **RRP-0030 claim authoring keys** ([RRP-0030](https://github.com/random-walks/rrxiv/blob/main/proposals/0030-claim-authoring-keys.md), #91). The `claim` environment's optional argument may be a key=value list — `type=` (claim_type), `evidence=` (evidence_type), `confidence=`/`confidence-low=`/`confidence-high=`/`rationale=` (the confidence object), `labels={...}`, and the scope keys `models=`/`datasets=`/`regimes=`/`assumptions=`. Backwards compatible (a plain title stays a title); validation is loud — unknown keys, bad enums, or out-of-range floats fail the parse (`ClaimKeyError`) instead of silently defaulting. Pairs with `rrxiv.cls` 0.8+.
+- **Agent-drivable ORCID login.** `rrxiv login orcid --print-url` emits the paste-flow authorization URL and exits (hand the link to a human); `--code <RRXIV-XXXX-XXXX>` redeems the paste code non-interactively and persists the bearer. Against a remote server the paste-back flow is now the **default** (the local-listener flow only works for dev ORCID apps registered with localhost redirect URIs — exactly the `redirect_uri does not match` wall the old default hit against rrxiv.com); force the listener with `--listener`. Listener timeout now suggests the paste flow.
+
+### Fixed
+
+- **Edge macros no longer leak into claim statements** (#93). `\dependson`/`\supports`/`\contradicts`/`\extendsclaim` inside a claim body are stripped from the CIR `statement` (previously only proofs were cleaned); also fixed `_EDGE_MACRO_RE` matching `extends` instead of the real `\extendsclaim`, so extends-edges are now stripped from proofs too. Live corpora clean up on their next reparse/submission.
+- **Line-wrapped RRP-0030 key lists parse correctly** (#92). pylatexenc drops brace-containing optional args into the body; the recovery now spans newlines, and a non-key bracket prefix (e.g. a `[1]` citation opening the prose) stays in the statement.
+- **`login status` sees keyring-held credentials.** The keyring backend now maintains the metadata index file (no secrets — tokens/keys redacted as `<in-keyring>`) that `login status`/`stored_servers` read; previously every keyring-stored identity was invisible to `status`.
+- Dead assignment in `papers/diff.py`; `rrxiv diff` CLI + `GET /papers/{id}/errata` documented (#90).
+
+### Changed
+
+- Vendored `reproducibility_manifest.schema.json` 0.1.0 → 0.1.1 (#94, rrxiv#59): manifests may carry the `$schema` self-identification key shown in RRP-0019's example.
+
+## [0.1.0] — 2026-07-12
 
 First public release. Everything below ships in 0.1.0 (the package was
 developed under `[Unreleased]` and had never been published to PyPI, so

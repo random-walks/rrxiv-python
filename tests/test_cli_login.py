@@ -253,3 +253,117 @@ def test_login_orcid_loopback_simulated(
     bearer = load_bearer(reference_server["url"], "orcid")
     assert bearer is not None
     assert bearer.identity_type == "orcid"
+
+
+# ----------------------- agent-drivable ORCID login -----------------------
+
+
+def test_login_orcid_print_url(cred_env: Path, reference_server: Any) -> None:
+    """--print-url emits the paste-flow authorization URL and exits 0."""
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["login", "orcid", "--server", reference_server["url"], "--print-url"],
+    )
+    assert result.exit_code == 0, result.output
+    url = result.output.strip()
+    assert "/auth/orcid/start?" in url
+    assert "redirect_uri=" in url
+    assert "render" in url
+    # No token was stored — this is half 1 only.
+    assert load_bearer(reference_server["url"], "orcid") is None
+
+
+def test_login_orcid_code_redeems_and_persists(
+    cred_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--code posts to exchange-paste and persists the bearer."""
+    import httpx as _httpx
+
+    captured: dict[str, Any] = {}
+
+    def fake_post(url: str, json: Any = None, timeout: float = 0) -> Any:
+        captured["url"] = url
+        captured["json"] = json
+        return _httpx.Response(
+            200,
+            json={
+                "token": "tok-123",
+                "orcid_id": "0000-0000-0000-0000",
+                "expires_in_seconds": 3600,
+            },
+            request=_httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr("httpx.post", fake_post)
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "login",
+            "orcid",
+            "--server",
+            "https://api.example.com/api/v0",
+            "--code",
+            "RRXIV-TEST-CODE",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["url"].endswith("/auth/orcid/exchange-paste")
+    assert captured["json"] == {"code": "RRXIV-TEST-CODE"}
+    bearer = load_bearer("https://api.example.com/api/v0", "orcid")
+    assert bearer is not None
+    assert bearer.identity == "0000-0000-0000-0000"
+    assert bearer.token == "tok-123"
+
+
+def test_login_orcid_code_rejected(
+    cred_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rejected paste code exits non-zero and stores nothing."""
+    import httpx as _httpx
+
+    def fake_post(url: str, json: Any = None, timeout: float = 0) -> Any:
+        return _httpx.Response(
+            400, json={"detail": "bad code"}, request=_httpx.Request("POST", url)
+        )
+
+    monkeypatch.setattr("httpx.post", fake_post)
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "login",
+            "orcid",
+            "--server",
+            "https://api.example.com/api/v0",
+            "--code",
+            "RRXIV-BAD-CODE",
+        ],
+    )
+    assert result.exit_code == 2
+    assert load_bearer("https://api.example.com/api/v0", "orcid") is None
+
+
+def test_login_orcid_remote_defaults_to_paste_flow(
+    cred_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Against a non-loopback server the paste flow is the default —
+    the local-listener flow only works for dev ORCID apps registered
+    with localhost redirect URIs."""
+    from rrxiv.cli import login as login_mod
+
+    called: dict[str, str] = {}
+    monkeypatch.setattr(
+        login_mod,
+        "_login_orcid_paste",
+        lambda api_base: called.setdefault("api_base", api_base),
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["login", "orcid", "--server", "https://api.example.com/api/v0"],
+    )
+    assert result.exit_code == 0, result.output
+    assert called["api_base"] == "https://api.example.com/api/v0"
+    assert "paste-back flow" in result.output

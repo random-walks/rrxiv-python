@@ -157,6 +157,19 @@ def _start_loopback_server(
     return server, thread
 
 
+def _is_local_api(api_base: str) -> bool:
+    """True when the API base points at a loopback host.
+
+    The local-listener OAuth flow only works when the ORCID app is
+    registered with ``http://127.0.0.1:<port>/callback`` redirect URIs —
+    i.e. a dev app against a local server. Production ORCID apps
+    register the server-side ``/auth/orcid/render`` redirect, so against
+    a remote api base the paste flow is the only one that can succeed.
+    """
+    host = urllib.parse.urlsplit(api_base).hostname or ""
+    return host in ("127.0.0.1", "localhost", "::1")
+
+
 @login_app.command("orcid")
 def login_orcid(
     server: Annotated[
@@ -170,14 +183,74 @@ def login_orcid(
         bool,
         typer.Option("--no-browser", help="Use the paste-back flow instead of a local listener."),
     ] = False,
+    force_listener: Annotated[
+        bool,
+        typer.Option(
+            "--listener",
+            help=(
+                "Force the local-listener flow even against a remote server "
+                "(requires an ORCID app registered with localhost redirect URIs)."
+            ),
+        ),
+    ] = False,
+    print_url_only: Annotated[
+        bool,
+        typer.Option(
+            "--print-url",
+            help=(
+                "Agent-drivable half 1: print the paste-flow authorization URL "
+                "and exit. A human opens it in any browser, signs in on ORCID, "
+                "and reads the paste code off the rrxiv page. Redeem it with "
+                "--code."
+            ),
+        ),
+    ] = False,
+    paste_code: Annotated[
+        str | None,
+        typer.Option(
+            "--code",
+            help=(
+                "Agent-drivable half 2: redeem a paste code (RRXIV-XXXX-XXXX) "
+                "non-interactively and persist the bearer."
+            ),
+        ),
+    ] = None,
     timeout_seconds: Annotated[
         int, typer.Option("--timeout", help="Seconds to wait for the OAuth callback.")
     ] = 300,
 ) -> None:
-    """Run the ORCID OAuth flow and persist the resulting token."""
+    """Run the ORCID OAuth flow and persist the resulting token.
+
+    Against a remote server (the default, rrxiv.com) this uses the
+    paste-back flow: it prints a URL, you sign in on ORCID in any
+    browser, and paste back the short code the rrxiv page shows. The
+    two halves are separately scriptable via ``--print-url`` and
+    ``--code`` so a coding agent can hand its human the link and redeem
+    the code without an interactive prompt. Against a loopback server
+    (local dev) it runs the classic local-listener flow; force that
+    remotely with ``--listener``.
+    """
     api_base = _resolved_server(server)
 
-    if no_browser:
+    if paste_code is not None:
+        _redeem_orcid_paste_code(api_base, paste_code)
+        return
+    if print_url_only:
+        from rrxiv.auth import build_orcid_authorization_url
+
+        auth_url = build_orcid_authorization_url(
+            api_base=api_base,
+            redirect_uri=f"{api_base}/auth/orcid/render",
+        )
+        typer.echo(auth_url.url)
+        return
+    if no_browser or (not force_listener and not _is_local_api(api_base)):
+        if not no_browser and not _is_local_api(api_base):
+            typer.echo(
+                "Remote server detected — using the paste-back flow "
+                "(the local-listener flow needs an ORCID app registered "
+                "with localhost redirects; force it with --listener)."
+            )
         _login_orcid_paste(api_base)
         return
 
@@ -209,7 +282,12 @@ def login_orcid(
         _print_error(f"OAuth provider returned error: {result.error}")
         raise typer.Exit(2)
     if not result.code:
-        _print_error("timed out waiting for OAuth callback; try --no-browser")
+        _print_error(
+            "timed out waiting for OAuth callback. If ORCID showed a "
+            "'redirect_uri does not match' error, the app isn't registered "
+            "for localhost redirects — rerun without --listener (or with "
+            "--no-browser) to use the paste-back flow."
+        )
         raise typer.Exit(2)
     if result.state != auth_url.state:
         _print_error(
@@ -248,6 +326,15 @@ def _login_orcid_paste(api_base: str) -> None:
     typer.echo(f"  {auth_url.url}")
     typer.echo()
     code = typer.prompt("Paste the code shown on the rrxiv page")
+    _redeem_orcid_paste_code(api_base, code)
+
+
+def _redeem_orcid_paste_code(api_base: str, code: str) -> None:
+    """Exchange a paste code for a bearer and persist it.
+
+    Shared by the interactive paste flow and the agent-drivable
+    ``--code`` option.
+    """
     code = code.strip()
     if not code:
         _print_error("empty code")

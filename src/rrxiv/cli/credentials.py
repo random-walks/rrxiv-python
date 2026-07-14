@@ -141,6 +141,10 @@ def store_bearer(record: StoredBearer) -> None:
             _bearer_username(record.api_base, record.identity_type),
             json.dumps(_bearer_to_dict(record)),
         )
+        # Keep the metadata index in sync so `login status` /
+        # `stored_servers` can enumerate keyring-held credentials. The
+        # index carries NO secret — the token field is redacted.
+        _file_update(lambda d: _index_set_bearer(d, record))
     else:
         _file_update(lambda d: _file_set_bearer(d, record))
 
@@ -170,6 +174,7 @@ def delete_bearer(api_base: str, identity_type: IdentityType) -> None:
             )
         except keyring.errors.PasswordDeleteError:
             pass
+        _file_update(lambda d: _file_delete_bearer(d, api_base, identity_type))
     else:
         _file_update(lambda d: _file_delete_bearer(d, api_base, identity_type))
 
@@ -186,6 +191,9 @@ def store_agent_key(record: StoredAgentKey) -> None:
             _agent_key_username(record.api_base, record.handle),
             json.dumps(_agent_key_to_dict(record)),
         )
+        # Metadata-only index entry (no key material) so `login status`
+        # can enumerate keyring-held identities.
+        _file_update(lambda d: _index_set_agent_key(d, record))
     else:
         _file_update(lambda d: _file_set_agent_key(d, record))
 
@@ -213,6 +221,7 @@ def delete_agent_key(api_base: str, handle: str) -> None:
             )
         except keyring.errors.PasswordDeleteError:
             pass
+        _file_update(lambda d: _file_delete_agent_key(d, api_base, handle))
     else:
         _file_update(lambda d: _file_delete_agent_key(d, api_base, handle))
 
@@ -361,6 +370,33 @@ def _file_set_agent_key(d: dict[str, Any], record: StoredAgentKey) -> None:
     server = d.setdefault("credentials", {}).setdefault(record.api_base, {})
     handles = server.setdefault("agent_keys", {})
     handles[record.handle] = _agent_key_to_dict(record)
+
+
+# --------------------- keyring metadata index (no secrets) ---------------------
+#
+# When the keyring backend holds the actual secrets, we still maintain the
+# credentials file as a *metadata index* so `login status` / `stored_servers`
+# can enumerate identities. Every secret-bearing field is redacted; loads
+# always go to the keyring on that backend.
+
+_INDEX_REDACTED = "<in-keyring>"
+
+
+def _index_set_bearer(d: dict[str, Any], record: StoredBearer) -> None:
+    entry = _bearer_to_dict(record)
+    entry["token"] = _INDEX_REDACTED
+    d.setdefault("credentials", {}).setdefault(record.api_base, {})[
+        record.identity_type
+    ] = entry
+
+
+def _index_set_agent_key(d: dict[str, Any], record: StoredAgentKey) -> None:
+    entry = _agent_key_to_dict(record)
+    for secret_field in ("private_key_b64", "private_key", "secret"):
+        if secret_field in entry:
+            entry[secret_field] = _INDEX_REDACTED
+    server = d.setdefault("credentials", {}).setdefault(record.api_base, {})
+    server.setdefault("agent_keys", {})[record.handle] = entry
 
 
 def _file_load_agent_key(api_base: str, handle: str) -> StoredAgentKey | None:
