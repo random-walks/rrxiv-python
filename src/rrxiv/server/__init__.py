@@ -27,7 +27,26 @@ The server expects the ``[server]`` extra to be installed.
 
 from __future__ import annotations
 
-from rrxiv.server.app import build_app
-from rrxiv.server.settings import ServerSettings
+from typing import Any
 
 __all__ = ["ServerSettings", "build_app"]
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy exports (PEP 562).
+
+    ``build_app``/``ServerSettings`` pull in FastAPI (the ``[server]``
+    extra). Deferring them keeps light server submodules — the store
+    backends, ``papers.slug``, ``papers.claim_ids`` — importable on a
+    bare ``pip install rrxiv`` (the ``rrxiv seed-store`` CLI path),
+    where an eager FastAPI import used to break the whole CLI.
+    """
+    if name == "build_app":
+        from rrxiv.server.app import build_app
+
+        return build_app
+    if name == "ServerSettings":
+        from rrxiv.server.settings import ServerSettings
+
+        return ServerSettings
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
